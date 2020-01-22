@@ -11,6 +11,15 @@
  *
  */
 
+// TODO: now that header and data comes in on "separate" lines, need to figure out how the
+// pop and push commands work.
+// For push, this should be easy. Set where to read information from, then do the push.
+// The only odd thing is that some pushes (i.e., sending a writeback on to memory) will
+// dequeue data packets from the LCE response channel, or uncached stores will dequeue
+// data packet from LCE request channel. In these cases, popq should then only dequeue the header.
+
+
+
 module bp_cce_msg_cached
   import bp_common_pkg::*;
   import bp_common_aviary_pkg::*;
@@ -22,10 +31,10 @@ module bp_cce_msg_cached
     // Derived parameters
     , localparam block_size_in_bytes_lp    = (cce_block_width_p/8)
     , localparam lg_lce_assoc_lp           = `BSG_SAFE_CLOG2(lce_assoc_p)
-    , localparam mshr_width_lp = `bp_cce_mshr_width(lce_id_width_p, lce_assoc_p, paddr_width_p)
+    , localparam mshr_width_lp             = `bp_cce_mshr_width(lce_id_width_p, lce_assoc_p, paddr_width_p)
     , localparam lg_lce_sets_lp            = `BSG_SAFE_CLOG2(lce_sets_p)
     , localparam lg_block_size_in_bytes_lp = `BSG_SAFE_CLOG2(block_size_in_bytes_lp)
-    , localparam num_way_groups_lp         = ((lce_sets_p % num_cce_p) == 0) ? (lce_sets_p/num_cce_p) : ((lce_sets_p/num_cce_p) + 1)
+    , localparam num_way_groups_lp         = `BSG_CDIV(cce_way_groups_p, num_cce_p)
     , localparam lg_num_way_groups_lp      = `BSG_SAFE_CLOG2(num_way_groups_lp)
     , localparam lg_num_lce_lp             = `BSG_SAFE_CLOG2(num_lce_p)
 
@@ -39,8 +48,6 @@ module bp_cce_msg_cached
    , input [cce_id_width_p-1:0]                        cce_id_i
 
    // LCE-CCE Interface
-   // inbound: valid->ready (a.k.a., valid->yumi), demanding consumer (connects to FIFO)
-   // outbound: ready&valid (connects directly to ME network)
    , input [lce_cce_req_width_lp-1:0]                  lce_req_i
    , input                                             lce_req_v_i
    , output logic                                      lce_req_yumi_o
@@ -54,8 +61,6 @@ module bp_cce_msg_cached
    , input                                             lce_cmd_ready_i
 
    // CCE-MEM Interface
-   // inbound: valid->ready (a.k.a., valid->yumi), demanding consumer (connects to FIFO)
-   // outbound: ready&valid (connects to FIFO)
    , input [cce_mem_msg_width_lp-1:0]                  mem_resp_i
    , input                                             mem_resp_v_i
    , output logic                                      mem_resp_yumi_o
@@ -84,8 +89,6 @@ module bp_cce_msg_cached
 
    , input [num_lce_p-1:0]                             sharers_hits_i
    , input [num_lce_p-1:0][lg_lce_assoc_lp-1:0]        sharers_ways_i
-
-   , input [dword_width_p-1:0]                         nc_data_i
 
    , output logic                                      fence_zero_o
 
@@ -585,6 +588,7 @@ module bp_cce_msg_cached
       default: lce_cmd_addr = '0;
     endcase
 
+    // TODO: this is a fun bug...bit width selection should be bits for associativity
     case (decoded_inst_i.lce_cmd_way_sel)
       e_lce_cmd_way_r0: lce_cmd_way = gpr_i[e_gpr_r0][lce_id_width_p-1:0];
       e_lce_cmd_way_r1: lce_cmd_way = gpr_i[e_gpr_r1][lce_id_width_p-1:0];
@@ -633,7 +637,7 @@ module bp_cce_msg_cached
             // load or store
             if (mshr.flags[e_flag_sel_rqf]) begin
               mem_cmd_lo.msg_type = e_cce_mem_uc_wr;
-              mem_cmd_lo.data = {(cce_block_width_p-dword_width_p)'('0),nc_data_i};
+              mem_cmd_lo.data = {(cce_block_width_p-dword_width_p)'('0),lce_req.msg.uc_req.data};
             end else begin
               mem_cmd_lo.msg_type = e_cce_mem_uc_rd;
             end
@@ -736,6 +740,8 @@ module bp_cce_msg_cached
         // the coherence transaction is closed (this happens when memory response returns after
         // the coh_ack for the transaction).
         else if (decoded_inst_i.mem_resp_yumi) begin
+          // TODO: this might be a bug? What memory responses would this apply to?
+          // Could require programmer to do it explicitly in microcode.
           if (~pending_w_busy_o) begin
             mem_resp_yumi_o = decoded_inst_i.mem_resp_yumi;
             // decrement the fence counter when dequeueing the memory response

@@ -26,23 +26,23 @@ module bp_cce_msg
     , localparam lg_block_size_in_bytes_lp = `BSG_SAFE_CLOG2(block_size_in_bytes_lp)
     , localparam lg_lce_assoc_lp           = `BSG_SAFE_CLOG2(lce_assoc_p)
     , localparam lg_lce_sets_lp            = `BSG_SAFE_CLOG2(lce_sets_p)
-    , localparam num_way_groups_lp         = ((lce_sets_p % num_cce_p) == 0) ? (lce_sets_p/num_cce_p) : ((lce_sets_p/num_cce_p) + 1)
+    , localparam num_way_groups_lp         = `BSG_CDIV(cce_way_groups_p, num_cce_p)
     , localparam lg_num_way_groups_lp      = `BSG_SAFE_CLOG2(num_way_groups_lp)
-    , localparam mshr_width_lp = `bp_cce_mshr_width(lce_id_width_p, lce_assoc_p, paddr_width_p)
-    , localparam cfg_bus_width_lp = `bp_cfg_bus_width(vaddr_width_p, core_id_width_p, cce_id_width_p, lce_id_width_p, cce_pc_width_p, cce_instr_width_p)
+    , localparam mshr_width_lp             = `bp_cce_mshr_width(lce_id_width_p, lce_assoc_p, paddr_width_p)
 
-    // interface widths
+    // Interface Widths
+    , localparam cfg_bus_width_lp          = `bp_cfg_bus_width(vaddr_width_p, core_id_width_p, cce_id_width_p, lce_id_width_p, cce_pc_width_p, cce_instr_width_p)
+    `declare_bp_lce_cce_if_header_widths(cce_id_width_p, lce_id_width_p, lce_assoc_p, paddr_width_p)
     `declare_bp_lce_cce_if_widths(cce_id_width_p, lce_id_width_p, paddr_width_p, lce_assoc_p, dword_width_p, cce_block_width_p)
     `declare_bp_me_if_widths(paddr_width_p, cce_block_width_p, lce_id_width_p, lce_assoc_p)
   )
   (input                                               clk_i
    , input                                             reset_i
 
+   // Configuration Interface
    , input [cfg_bus_width_lp-1:0]                      cfg_bus_i
 
    // LCE-CCE Interface
-   // inbound: valid->ready (a.k.a., valid->yumi), demanding consumer (connects to FIFO)
-   // outbound: ready&valid (connects directly to ME network)
    , input [lce_cce_req_width_lp-1:0]                  lce_req_i
    , input                                             lce_req_v_i
    , output logic                                      lce_req_yumi_o
@@ -56,8 +56,6 @@ module bp_cce_msg
    , input                                             lce_cmd_ready_i
 
    // CCE-MEM Interface
-   // inbound: valid->ready (a.k.a., valid->yumi), demanding consumer (connects to FIFO)
-   // outbound: ready&valid (connects to FIFO)
    , input [cce_mem_msg_width_lp-1:0]                  mem_resp_i
    , input                                             mem_resp_v_i
    , output logic                                      mem_resp_yumi_o
@@ -66,36 +64,78 @@ module bp_cce_msg
    , output logic                                      mem_cmd_v_o
    , input                                             mem_cmd_ready_i
 
-   // MSHR
-   , input [mshr_width_lp-1:0]                         mshr_i
+
+   // Arbitration signals to stall unit
+   // TODO: split busy signals into lce_req, lce_resp, mem_resp
+   // TODO: split busy signals into lce_cmd, mem_cmd
+   // TODO: add busy signal for invalidate commnad? or use msg_tx_busy
+   , output logic                                      msg_tx_busy_o
+   , output logic                                      msg_rx_busy_o
+   , output logic                                      msg_spec_r_busy_o
+   , output logic                                      msg_spec_w_busy_o
+
+   // Pending bit write
+   // TODO: busy signal differentiates between an auto-forwarding message writing
+   // the bits, and an instruction writing the bits...
+   // Do we need that?
+   , output logic                                      pending_w_busy_o
+   , output logic                                      pending_w_v_o
+   , output logic [paddr_width_p-1:0]                  pending_w_addr_o
+   , output logic                                      pending_w_addr_bypass_o
+   , output logic                                      pending_o
+
+   // Directory write interface
+   // used when sending invalidates
+   , output bp_cce_inst_minor_dir_op_e                 dir_w_cmd_o
+   , output logic                                      dir_w_v_o
+   , output logic [paddr_width_p-1:0]                  dir_w_addr_o
+   , output logic                                      dir_w_addr_bypass_hash_o
+   , output logic [lce_id_width_p-1:0]                 dir_lce_o
+   , output logic [lce_assoc_width_lp-1:0]             dir_way_o
+   , output bp_coh_states_e                            dir_coh_state_o
+
+   // TODO: roll these into decoded instruction?
+   // Input signals to feed output commands
+   , input [lce_id_width_p-1:0]                        lce_i
+   , input [paddr_width_p-1:0]                         addr_i
+   , input [lg_assoc_lp-1:0]                           way_i
+   , input [cce_lce_data_width_p-1:0]                  data_i
+   , input bp_cce_mem_cmd_type_e                       mem_cmd_i
+   , input bp_cce_mem_req_size_e                       mem_cmd_size_i
+   , input bp_coh_states_e                             coh_state_i
+   , input bp_lce_cmd_type_e                           lce_cmd_i
+   , input bp_lce_cce_data_length_e                    lce_cmd_data_length_i
+
+   // For invalidation command
+   , input [num_lce_p-1:0]                             sharers_hits_i
+   , input [num_lce_p-1:0][lg_lce_assoc_lp-1:0]        sharers_ways_i
 
    // Decoded Instruction
    , input bp_cce_inst_decoded_s                       decoded_inst_i
 
-   // Pending bit write
-   , output logic                                      pending_w_v_o
-   , output logic [lg_num_way_groups_lp-1:0]           pending_w_way_group_o
-   , output logic                                      pending_o
+
+///////////////////////////// OLD //////////////////////////////
+
+
+   // MSHR
+   , input [mshr_width_lp-1:0]                         mshr_i
+
 
    // arbitration signals to instruction decode
-   , output logic                                      pending_w_busy_o
    , output logic                                      lce_cmd_busy_o
    , output logic                                      msg_inv_busy_o
 
-   , input [`bp_cce_inst_num_gpr-1:0][`bp_cce_inst_gpr_width-1:0] gpr_i
-
-   , input [num_lce_p-1:0]                             sharers_hits_i
-   , input [num_lce_p-1:0][lg_lce_assoc_lp-1:0]        sharers_ways_i
-
-   , input [dword_width_p-1:0]                         nc_data_i
-
-   , output logic                                      fence_zero_o
-
-   , output logic [lg_num_lce_lp-1:0]                  lce_id_o
-   , output logic [lg_lce_assoc_lp-1:0]                lce_way_o
-
-   , output logic                                      dir_w_v_o
   );
+
+  //synopsys translate_off
+  initial begin
+    assert(cce_lce_data_width_p == 64) else
+      $error("CCE-LCE data width must be 64-bits");
+    assert(cce_lce_data_width_p == cce_mem_data_width_p) else
+      $error("CCE-LCE and CCE-MEM data widths must be the same");
+  end
+  //synopsys translate_on
+
 
   // Define structure variables for output queues
   `declare_bp_cfg_bus_s(vaddr_width_p, core_id_width_p, cce_id_width_p, lce_id_width_p, cce_pc_width_p, cce_instr_width_p);
@@ -175,7 +215,6 @@ module bp_cce_msg
       ,.gpr_i(gpr_i)
       ,.sharers_hits_i(sharers_hits_i)
       ,.sharers_ways_i(sharers_ways_i)
-      ,.nc_data_i(nc_data_i)
 
       ,.fence_zero_o(fence_zero_o)
 
