@@ -8,6 +8,12 @@
  *
  */
 
+// TODO: when a cache to cache transfer happens (of a block in E or M), does the LCE
+// also clear the dirty bit of for the block? If the CCE does not writeback the block
+// after the transfer (which only needs to happen if it is an M->S) transition, then
+// it might be possible for the block (now invalid) in the cache/LCE that had it in
+// the M state to be invalid, but still have the dirty bit set. This would be incorrect.
+
 module bp_cce
   import bp_common_pkg::*;
   import bp_common_aviary_pkg::*;
