@@ -86,6 +86,8 @@ module bp_cce_msg
 
    // Directory write interface
    // used when sending invalidates
+   // TODO: need to feed in dir_busy signal from directory to block directory write in the event
+   // that message unit tries to write directory while directory is still reading
    , output bp_cce_inst_minor_dir_op_e                 dir_w_cmd_o
    , output logic                                      dir_w_v_o
    , output logic [paddr_width_p-1:0]                  dir_w_addr_o

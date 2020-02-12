@@ -35,7 +35,8 @@ module bp_cce_inst_predecode
 
   wire [width_p-1:0] pc_plus_one = pc_i + 'd1;
   wire [width_p-1:0] branch_target = inst_i.type_u.branch.target[0+:width_p];
+  wire predict_taken = (inst_i.branch & inst_i.predict_taken);
 
-  assign predicted_next_pc_o = predict_taken_o ? branch_target : pc_plus_one;
+  assign predicted_next_pc_o = predict_taken ? branch_target : pc_plus_one;
 
 endmodule

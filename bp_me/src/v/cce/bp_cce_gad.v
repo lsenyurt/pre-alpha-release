@@ -46,9 +46,10 @@ module bp_cce_gad
    // Outputs
    , output logic [lg_lce_assoc_lp-1:0]                    req_addr_way_o
 
-   , output logic                                          transfer_flag_o
    , output logic [lce_id_width_p-1:0]                     owner_lce_o
    , output logic [lg_lce_assoc_lp-1:0]                    owner_way_o
+
+   , output logic                                          transfer_flag_o
    , output logic                                          replacement_flag_o
    , output logic                                          upgrade_flag_o
    , output logic                                          invalidate_flag_o

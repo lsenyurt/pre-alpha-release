@@ -140,14 +140,6 @@ typedef enum logic [3:0] {
   ,e_sth_op                              = 4'b0101   // Store half-word to memory
   ,e_stw_op                              = 4'b0110   // Store word to memory
   ,e_std_op                              = 4'b0111   // Store double-word to memory
-//,e_mldb_op                             = 4'b1000   // Load byte from global memory
-//,e_mldh_op                             = 4'b1001   // Load half-word from global memory
-//,e_mldw_op                             = 4'b1010   // Load word from global memory
-//,e_mldd_op                             = 4'b1011   // Load double-word from global memory
-//,e_mstb_op                             = 4'b1100   // Store byte to global memory
-//,e_msth_op                             = 4'b1101   // Store half-word to global memory
-//,e_mstw_op                             = 4'b1110   // Store word to global memory
-//,e_mstd_op                             = 4'b1111   // Store double-word to global memory
 } bp_cce_inst_minor_mem_op_e;
 
 // Minor Flag Op Codes
@@ -177,9 +169,9 @@ typedef enum logic [3:0] {
   ,e_wdp_op                              = 4'b0100   // Write Pending Bit
   ,e_clp_op                              = 4'b0101   // Clear Pending Bit
   ,e_clr_op                              = 4'b0110   // Clear Directory Row
-  ,e_wde_op                              = 4'b0110   // Write Directory Entry
-  ,e_wds_op                              = 4'b0111   // Write Directory Entry State
-  ,e_gad_op                              = 4'b1000   // Generate Auxiliary Data
+  ,e_wde_op                              = 4'b0111   // Write Directory Entry
+  ,e_wds_op                              = 4'b1000   // Write Directory Entry State
+  ,e_gad_op                              = 4'b1001   // Generate Auxiliary Data
 } bp_cce_inst_minor_dir_op_e;
 
 // Minor Queue Op Codes
@@ -191,7 +183,7 @@ typedef enum logic [3:0] {
 // 3. popq dequeues only the header. We assume that all data has been popped off
 //    either by popd commands, or by the message unit auto-forward mechanism, or by issuing
 //    a pushq command that consumes the data (e.g., an explicit pushq memCmd that consumes an
-//    lceResp containing writeback data).
+//    lceResp containing writeback data). No state is written from the message to the CCE.
 
 typedef enum logic [3:0] {
   e_wfq_op                               = 4'b0000   // Wait for Queue Valid
@@ -199,9 +191,9 @@ typedef enum logic [3:0] {
 //,e_pushqc_op                           = 4'b0001   // Push Queue Custom Message
   ,e_popq_op                             = 4'b0010   // Pop Queue - dequeue the header
   ,e_poph_op                             = 4'b0011   // Pop Header From Queue - does not pop message
+  // TODO: popd not yet supported - will be supported after serdes changes
   ,e_popd_op                             = 4'b0100   // Pop Data From Queue
-  ,e_wspecq_op                           = 4'b0101   // Write speculative access bits
-  ,e_rspecq_op                           = 4'b0110   // Read speculative access bits to GPR
+  ,e_specq_op                            = 4'b0101   // Write or read speculative access bits
   ,e_inv_op                              = 4'b1000   // Send all Invalidations based on sharers vector
 } bp_cce_inst_minor_queue_op_e;
 
@@ -356,8 +348,11 @@ typedef enum logic [3:0] {
   ,e_opd_uc_req_size                     = 4'b1001 // MSHR.uc_req_size
   ,e_opd_data_length                     = 4'b1010 // MSHR.data_length
 
-  // sharers vectors require src_a/b to provide GPR rX containing index to use
-  // These can only be sources, not destinations
+  // only used as a source
+  ,e_opd_flags_and_mask                  = 4'b1011 // MSHR.flags & imm[0+:num_flags]
+
+  // sharers vectors require src_b to provide GPR rX containing index to use
+  // These can only be used as source a, not as source b or destinations
   ,e_opd_sharers_hit                     = 4'b1101 // sharers_hits[rX]
   ,e_opd_sharers_way                     = 4'b1110 // sharers_ways[rX]
   ,e_opd_sharers_state                   = 4'b1111 // sharers_states[rX]
@@ -1059,12 +1054,25 @@ typedef struct packed {
   logic                                    mem_cmd_v;
   bp_cce_mem_cmd_type_e                    mem_cmd;
 
-  // Instruction writes the dst field specified in the decoded instruction
-  logic                                    dst_w_v;
-
-  // Flag write mask - for instructions that implicitly write flags, e.g.,
-  // GAD, popq
+  // GPR write mask
+  logic [`bp_cce_inst_num_gpr-1:0]         gpr_w_v;
+  // MSHR write signals
+  logic                                    mshr_clear;
+  logic                                    lce_w_v;
+  logic                                    addr_w_v;
+  logic                                    way_w_v;
+  logic                                    lru_addr_w_v;
+  logic                                    lru_way_w_v;
+  logic                                    owner_lce_w_v;
+  logic                                    owner_way_w_v;
+  logic                                    next_coh_state_w_v;
+  // Flag write mask - for instructions that implicitly write flags, e.g., GAD, popq
   logic [`bp_cce_inst_num_flags-1:0]       flag_w_v;
+  logic                                    uc_req_size_w_v;
+  logic                                    data_length_w_v;
+  // Special/Param registers
+  logic                                    coh_state_w_v;
+  logic                                    auto_fwd_msg_w_v;
 
   // Flag source selects
   bp_cce_inst_rqf_sel_e                    rqf_sel;
@@ -1083,22 +1091,6 @@ typedef struct packed {
   bp_cce_inst_if_sel_e                     if_sel;
   bp_cce_inst_nwbf_sel_e                   nwbf_sel;
   bp_cce_inst_sf_sel_e                     sf_sel;
-
-  // MSHR control
-  // TODO: these might not all be needed. For example next_coh_state is only written
-  // by an explicit movis instruction, so its write enable can be inferred from the
-  // destination field and select, and use dst_w_v
-  logic                                    mshr_clear;
-  logic                                    lce_w_v;
-  logic                                    addr_w_v;
-  logic                                    way_w_v;
-  logic                                    lru_addr_w_v;
-  logic                                    lru_way_w_v;
-  logic                                    owner_lce_w_v;
-  logic                                    owner_way_w_v;
-  logic                                    next_coh_state_w_v;
-  logic                                    uc_req_size_w_v;
-  logic                                    data_length_w_v;
 
 } bp_cce_inst_decoded_s;
 

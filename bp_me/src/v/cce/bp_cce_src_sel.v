@@ -132,6 +132,7 @@ module bp_cce_src_sel
           e_opd_flags:          src_a_o[0+:`bp_cce_inst_num_flags] = mshr.flags;
           e_opd_uc_req_size:    src_a_o[0+:$bits(bp_lce_cce_uc_req_size_e)] = mshr.uc_req_size;
           e_opd_data_length:    src_a_o[0+:$bits(bp_lce_cce_data_length_e)] = mshr.data_length;
+          e_opd_flags_and_mask: src_a_o[0+:`bp_cce_inst_num_flags] = mshr.flags & imm_i[0+:`bp_cce_inst_num_flags];
           e_opd_sharers_hit:    src_a_o[0] = sharers_hits_i[gpr_i[src_b_i.gpr[0+:`bp_cce_inst_gpr_sel_width]]];
           e_opd_sharers_way:    src_a_o[0+:lce_assoc_width_lp] = sharers_ways_i[gpr_i[src_b_i.gpr[0+:`bp_cce_inst_gpr_sel_width]]];
           e_opd_sharers_state:  src_a_o[0+:`bp_coh_bits] = sharers_coh_states_i;[gpr_i[src_b_i.gpr[0+:`bp_cce_inst_gpr_sel_width]]]
@@ -215,6 +216,7 @@ module bp_cce_src_sel
           e_opd_flags:          src_b_o[0+:`bp_cce_inst_num_flags] = mshr.flags;
           e_opd_uc_req_size:    src_b_o[0+:$bits(bp_lce_cce_uc_req_size_e)] = mshr.uc_req_size;
           e_opd_data_length:    src_b_o[0+:$bits(bp_lce_cce_data_length_e)] = mshr.data_length;
+          e_opd_flags_and_mask: src_b_o[0+:`bp_cce_inst_num_flags] = mshr.flags & imm_i[0+:`bp_cce_inst_num_flags];
           // Sharers vectors as source b is not supported
           //e_opd_sharers_hit:
           //e_opd_sharers_way:

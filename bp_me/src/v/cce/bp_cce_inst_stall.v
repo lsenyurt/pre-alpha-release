@@ -86,11 +86,15 @@ module bp_cce_inst_stall
 
     // Message Unit Structural Hazards
     stall_o |= (decoded_inst_i.pending_w_v & msg_pending_w_busy_i);
+    stall_o |= (decoded_inst_i.dir_w_v & msg_dir_w_busy_i);
+    stall_o |= (decoded_inst_i.spec_r_v & msg_spec_r_busy_i);
     stall_o |= (decoded_inst_i.lce_cmd_v & msg_lce_cmd_busy_i);
     stall_o |= (decoded_inst_i.lce_resp_yumi & msg_lce_resp_busy_i);
 
     // Only stall if the current instruction is valid
     // TODO: not needed because decoder outputs decoded_inst == '0 if instruction not valid
+
+    // TODO: does GAD need to stall with any action from message unit?
 
   end
 
