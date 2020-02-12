@@ -90,6 +90,7 @@ typedef enum logic [3:0] {
 //,e_dec_op                              = 4'b1001   // Decrement register by 1
   ,e_lshi_op                             = 4'b1010   // Left Shift immediate
   ,e_rshi_op                             = 4'b1011   // Right Shift immediate
+  ,e_not_op                              = 4'b1111   // Logical Not
 } bp_cce_inst_minor_alu_op_e;
 
 // Minor Branch Op Codes
@@ -213,15 +214,16 @@ typedef union packed {
 /*
  * ALU Unit Operation
  */
-typedef enum logic [2:0] {
-  e_add_op                               = 3'b000   // Add
-  ,e_sub_op                              = 3'b001   // Subtract
-  ,e_lsh_op                              = 3'b010   // Left Shift
-  ,e_rsh_op                              = 3'b011   // Right Shift
-  ,e_and_op                              = 3'b100   // Bit-wise AND
-  ,e_or_op                               = 3'b101   // Bit-wise OR
-  ,e_xor_op                              = 3'b110   // Bit-wise XOR
-  ,e_neg_op                              = 3'b111   // Bit-wise negation (unary)
+typedef enum logic [3:0] {
+  e_add_op                               = 4'b0000   // Add
+  ,e_sub_op                              = 4'b0001   // Subtract
+  ,e_lsh_op                              = 4'b0010   // Left Shift
+  ,e_rsh_op                              = 4'b0011   // Right Shift
+  ,e_and_op                              = 4'b0100   // Bit-wise AND
+  ,e_or_op                               = 4'b0101   // Bit-wise OR
+  ,e_xor_op                              = 4'b0110   // Bit-wise XOR
+  ,e_neg_op                              = 4'b0111   // Bit-wise negation (unary)
+  ,e_not_op                              = 4'b1000   // Logical Not (unary)
 } bp_cce_inst_alu_op_e;
 
 `define bp_cce_inst_alu_op_width $bits(bp_cce_inst_alu_op_e)

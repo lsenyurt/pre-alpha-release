@@ -40,10 +40,6 @@ module bp_cce
     // counter width (used for e.g., stall and performance counters)
     , localparam counter_width_lp          = 64
 
-    // TODO: this is used still to adjust width of input to GAD
-    // In most cases, use cce_id_width_p and lce_id_width_p instead of these.
-    , localparam lg_num_lce_lp             = `BSG_SAFE_CLOG2(num_lce_p)
-
     // Interface Widths
     , localparam cfg_bus_width_lp          = `bp_cfg_bus_width(vaddr_width_p, core_id_width_p, cce_id_width_p, lce_id_width_p, cce_pc_width_p, cce_instr_width_p)
     `declare_bp_lce_cce_if_header_widths(cce_id_width_p, lce_id_width_p, lce_max_assoc_p, paddr_width_p)
@@ -193,16 +189,6 @@ module bp_cce
   bp_coh_states_e coh_state_default_lo;
 
 
-
-
-
-  // TODO: From Branch, maybe unused
-  logic                                branch_res_lo;
-
-
-
-
-
   /*
    * Fetch Stage
    */
@@ -281,7 +267,7 @@ module bp_cce
       ,.branch_op_i(decoded_inst_lo.branch_op)
       ,.execute_pc_i(ex_pc_lo)
       ,.branch_target_i(decoded_inst_lo.branch_target)
-      ,.branch_res_o(branch_res_lo)
+      //,.branch_res_o(branch_res_lo)
       ,.mispredict_o(mispredict_lo)
       ,.pc_o(branch_resolution_pc_lo)
       );
@@ -371,7 +357,7 @@ module bp_cce
   bp_cce_pending
     #(.num_way_groups_p(num_way_groups_lp)
       ,.num_cce_p(num_cce_p)
-      ,.addr_width_p()
+      ,.addr_width_p(paddr_width_p)
      )
     pending_bits
      (.clk_i(clk_i)
@@ -392,6 +378,7 @@ module bp_cce
   bp_cce_gad
     #(.num_lce_p(num_lce_p)
       ,.lce_assoc_p(lce_max_assoc_p)
+      ,.lce_id_width_p(lce_id_width_p)
       )
     gad
      (.clk_i(clk_i)
@@ -403,7 +390,7 @@ module bp_cce
       ,.sharers_ways_i(sharers_ways_lo)
       ,.sharers_coh_states_i(sharers_coh_states_lo)
 
-      ,.req_lce_i(lg_num_lce_lp'(mshr_lo.lce_id))
+      ,.req_lce_i(mshr_lo.lce_id)
       ,.req_type_flag_i(mshr_lo.flags[e_flag_sel_rqf])
       ,.lru_dirty_flag_i(mshr_lo.flags[e_flag_sel_ldf])
       ,.lru_cached_excl_flag_i(mshr_lo.flags[e_flag_sel_lef])

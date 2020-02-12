@@ -28,13 +28,10 @@ module bp_cce_branch
    , input bp_cce_inst_branch_op_e           branch_op_i
    , input [cce_pc_width_p-1:0]              execute_pc_i
    , input [cce_pc_width_p-1:0]              branch_target_i
-   , output logic                            branch_res_o
+   //, output logic                            branch_res_o
    , output logic                            mispredict_o
    , output logic [cce_pc_width_p-1:0]       pc_o
   );
-
-  // TODO: branch_res_o needed?
-  // it is useful within the module (although easily substituted)
 
   wire equal = (opd_a_i == opd_b_i);
   wire not_equal = ~equal;
@@ -53,13 +50,13 @@ module bp_cce_branch
     endcase
 
     // gate branch result output on branch valid input signal
-    branch_res_o = branch_i & branch_res;
+    //branch_res_o = branch_i & branch_res;
 
     // Misprediction happens if:
     // a) branch was predicted not taken, but branch should have been taken
     // b) branch was predicted taken, but branch should not have been taken
-    mispredict_o = ((branch_res_o & !predicted_taken_i)
-                    | (!branch_res_o & predicted_taken_i));
+    mispredict_o = (((branch_i & branch_res) & !predicted_taken_i)
+                    | (!(branch_i & branch_res) & predicted_taken_i));
 
     // Output correct next PC (for all instructions)
     // If the current instruction is a branch and the branch evaluates to taken, the next PC

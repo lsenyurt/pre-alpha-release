@@ -36,6 +36,7 @@ module bp_cce_alu
       e_or_op:  res_o = opd_a_i | opd_b_i;
       e_xor_op: res_o = opd_a_i ^ opd_b_i;
       e_neg_op: res_o = ~opd_a_i;
+      e_not_op: res_o = !opd_a_i;
       default:  res_o = '0;
     endcase
   end

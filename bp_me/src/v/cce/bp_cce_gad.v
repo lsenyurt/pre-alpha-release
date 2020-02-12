@@ -62,13 +62,15 @@ module bp_cce_gad
   // Suppress unused signal warnings
   wire unused = &{clk_i, reset_i};
 
+  wire [lce_id_width_p-1:0] req_lce_id = req_lce_i[0+:lg_num_lce_lp];
+
   // one hot decoding of request LCE ID
   logic [num_lce_p-1:0] lce_id_one_hot;
   bsg_decode
     #(.num_out_p(num_lce_p)
      )
      lce_id_to_one_hot
-     (.i(req_lce_i[0+:lg_num_lce_lp])
+     (.i(req_lce_id)
       ,.o(lce_id_one_hot)
      );
 
@@ -88,13 +90,13 @@ module bp_cce_gad
 
   // hit in requesting LCE
   logic req_lce_cached;
-  assign req_lce_cached = lce_cached[req_lce_i[0+:lg_num_lce_lp]];
+  assign req_lce_cached = lce_cached[req_lce_id];
   // read-only permissions in requesting LCE
   logic req_lce_ro;
-  assign req_lce_ro = req_lce_cached & sharers_coh_states_i[req_lce_i[0+:lg_num_lce_lp]][`bp_coh_shared_bit];
+  assign req_lce_ro = req_lce_cached & sharers_coh_states_i[req_lce_id][`bp_coh_shared_bit];
 
   assign req_addr_way_o = req_lce_cached
-    ? sharers_ways_i[req_lce_i[0+:lg_num_lce_lp]]
+    ? sharers_ways_i[req_lce_id]
     : '0;
 
   // request type
