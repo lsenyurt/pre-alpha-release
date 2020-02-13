@@ -65,49 +65,6 @@ module bp_cce_msg
    , input                                             mem_cmd_ready_i
 
 
-   // Directory may be busy reading when message unit tries to write - so must block
-   // TODO: can this actually happen? I'm only thinking about "inv" operation
-   // msg_busy_o should be asserted during invalidate operation, which should then block
-   // any directory operations or queue operations
-   , input                                             dir_busy_i
-
-
-
-
-
-
-
-
-   // Arbitration signals to stall unit
-   // TODO: split busy signals into lce_req, lce_resp, mem_resp
-   // TODO: split busy signals into lce_cmd, mem_cmd
-   // TODO: add busy signal for invalidate commnad? or use msg_tx_busy
-   , output logic                                      msg_tx_busy_o
-   , output logic                                      msg_rx_busy_o
-   , output logic                                      msg_spec_r_busy_o
-   , output logic                                      msg_spec_w_busy_o
-
-   // Pending bit write
-   // TODO: busy signal differentiates between an auto-forwarding message writing
-   // the bits, and an instruction writing the bits...
-   // Do we need that?
-   , output logic                                      pending_w_busy_o
-   , output logic                                      pending_w_v_o
-   , output logic [paddr_width_p-1:0]                  pending_w_addr_o
-   , output logic                                      pending_w_addr_bypass_o
-   , output logic                                      pending_o
-
-   // Directory write interface
-   // used when sending invalidates
-   // TODO: need to feed in dir_busy signal from directory to block directory write in the event
-   // that message unit tries to write directory while directory is still reading
-   , output bp_cce_inst_minor_dir_op_e                 dir_w_cmd_o
-   , output logic                                      dir_w_v_o
-   , output logic [paddr_width_p-1:0]                  dir_w_addr_o
-   , output logic                                      dir_w_addr_bypass_hash_o
-   , output logic [lce_id_width_p-1:0]                 dir_lce_o
-   , output logic [lce_assoc_width_lp-1:0]             dir_way_o
-   , output bp_coh_states_e                            dir_coh_state_o
 
    // Input signals to feed output commands
    , input [lce_id_width_p-1:0]                        lce_i
@@ -126,20 +83,70 @@ module bp_cce_msg
    , input [num_lce_p-1:0]                             sharers_hits_i
    , input [num_lce_p-1:0][lg_lce_assoc_lp-1:0]        sharers_ways_i
 
+   // TODO: needed? probably yes to determine what message unit does
    // Decoded Instruction
    , input bp_cce_inst_decoded_s                       decoded_inst_i
-
-
-///////////////////////////// OLD //////////////////////////////
-
-
+   // TODO: needed? maybe not, signals above should cover required inputs?
    // MSHR
    , input [mshr_width_lp-1:0]                         mshr_i
 
 
-   // arbitration signals to instruction decode
+
+
+
+
+
+   // Spec Read Output
+   , output logic                                      spec_r_v_o
+   , output logic [paddr_width_p-1:0]                  spec_r_addr_o
+   , output logic                                      spec_r_addr_bypass_o
+
+   // Spec Write Output
+   , output logic                                      spec_w_v_o
+   , output logic [paddr_width_p-1:0]                  spec_w_addr_o
+   , output logic                                      spec_w_addr_bypass_o
+   , output logic                                      spec_v_o
+   , output logic                                      squash_v_o
+   , output logic                                      fwd_mod_v_o
+   , output logic                                      state_v_o
+   , output bp_cce_spec_s                              spec_o
+
+   // Pending bit write
+   // TODO: busy signal differentiates between an auto-forwarding message writing
+   // the bits, and an instruction writing the bits...
+   // Do we need that?
+   , output logic                                      pending_w_busy_o
+   , output logic                                      pending_w_v_o
+   , output logic [paddr_width_p-1:0]                  pending_w_addr_o
+   , output logic                                      pending_w_addr_bypass_o
+   , output logic                                      pending_o
+
+   // Directory write interface
+   // used when sending invalidates
+   // TODO: need to feed in dir_busy signal from directory to block directory write in the event
+   // that message unit tries to write directory while directory is still reading
+
+   // Directory may be busy reading when message unit tries to write - so must block
+   // TODO: can this actually happen? I'm only thinking about "inv" operation
+   // msg_busy_o should be asserted during invalidate operation, which should then block
+   // any directory operations or queue operations
+   , input                                             dir_busy_i
+
+   , output logic [paddr_width_p-1:0]                  dir_w_addr_o
+   , output logic                                      dir_w_addr_bypass_hash_o
+   , output logic [lce_id_width_p-1:0]                 dir_lce_o
+   , output logic [lce_assoc_width_lp-1:0]             dir_way_o
+   , output bp_coh_states_e                            dir_coh_state_o
+   , output bp_cce_inst_minor_dir_op_e                 dir_w_cmd_o
+   , output logic                                      dir_w_v_o
+
+
+
+
+
    , output logic                                      lce_cmd_busy_o
-   , output logic                                      msg_inv_busy_o
+   , output logic                                      mem_resp_busy_o
+   , output logic                                      busy_o
 
   );
 

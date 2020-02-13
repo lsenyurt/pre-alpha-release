@@ -58,6 +58,10 @@
  * Major Op Codes
  */
 
+// TODO: a couple ideas on useful instructions:
+// 1. bitfield select - can do with multiple ops
+// copy sharers hit vector to GPR?
+
 typedef enum logic [2:0] {
   e_op_alu                               = 3'b000    // ALU operation
   ,e_op_branch                           = 3'b001    // Branch (control flow) operation
@@ -195,6 +199,8 @@ typedef enum logic [3:0] {
   // TODO: popd not yet supported - will be supported after serdes changes
   ,e_popd_op                             = 4'b0100   // Pop Data From Queue
   ,e_specq_op                            = 4'b0101   // Write or read speculative access bits
+  // TODO: we may want to send invalidations to all but owner LCE, then send downgrade to owner
+  // How do we specify this to directory?
   ,e_inv_op                              = 4'b1000   // Send all Invalidations based on sharers vector
 } bp_cce_inst_minor_queue_op_e;
 
@@ -574,7 +580,7 @@ typedef enum logic [1:0] {
 typedef enum logic [1:0] {
   e_rqf_lce_req                          = 2'b00
   ,e_rqf_pending                         = 2'b01
-  ,e_rqf_imm0                            = 2'b10
+  ,e_rqf_src_a                           = 2'b10
 } bp_cce_inst_rqf_sel_e;
 
 `define bp_cce_inst_rqf_sel_width $bits(bp_cce_inst_rqf_sel_e)
@@ -583,7 +589,7 @@ typedef enum logic [1:0] {
 typedef enum logic [1:0] {
   e_ucf_lce_req                          = 2'b00
   ,e_ucf_pending                         = 2'b01
-  ,e_ucf_imm0                            = 2'b10
+  ,e_ucf_src_a                           = 2'b10
 } bp_cce_inst_ucf_sel_e;
 
 `define bp_cce_inst_ucf_sel_width $bits(bp_cce_inst_ucf_sel_e)
@@ -592,7 +598,7 @@ typedef enum logic [1:0] {
 typedef enum logic [1:0] {
   e_nerf_lce_req                         = 2'b00
   ,e_nerf_pending                        = 2'b01
-  ,e_nerf_imm0                           = 2'b10
+  ,e_nerf_src_a                          = 2'b10
 } bp_cce_inst_nerf_sel_e;
 
 `define bp_cce_inst_nerf_sel_width $bits(bp_cce_inst_nerf_sel_e)
@@ -601,7 +607,7 @@ typedef enum logic [1:0] {
 typedef enum logic [1:0] {
   e_ldf_lce_req                          = 2'b00
   ,e_ldf_pending                         = 2'b01
-  ,e_ldf_imm0                            = 2'b10
+  ,e_ldf_src_a                           = 2'b10
 } bp_cce_inst_ldf_sel_e;
 
 `define bp_cce_inst_ldf_sel_width $bits(bp_cce_inst_ldf_sel_e)
@@ -609,7 +615,7 @@ typedef enum logic [1:0] {
 // PF
 typedef enum logic {
   e_pf_logic                             = 1'b0
-  ,e_pf_imm0                             = 1'b1
+  ,e_pf_src_a                            = 1'b1
 } bp_cce_inst_pf_sel_e;
 
 `define bp_cce_inst_pf_sel_width $bits(bp_cce_inst_pf_sel_e)
@@ -617,7 +623,7 @@ typedef enum logic {
 // LEF
 typedef enum logic {
   e_lef_logic                            = 1'b0
-  ,e_lef_imm0                            = 1'b1
+  ,e_lef_src_a                           = 1'b1
 } bp_cce_inst_lef_sel_e;
 
 `define bp_cce_inst_lef_sel_width $bits(bp_cce_inst_lef_sel_e)
@@ -625,7 +631,7 @@ typedef enum logic {
 // CF
 typedef enum logic {
   e_cf_logic                             = 1'b0
-  ,e_cf_imm0                             = 1'b1
+  ,e_cf_src_a                            = 1'b1
 } bp_cce_inst_cf_sel_e;
 
 `define bp_cce_inst_cf_sel_width $bits(bp_cce_inst_cf_sel_e)
@@ -633,7 +639,7 @@ typedef enum logic {
 // CEF
 typedef enum logic {
   e_cef_logic                            = 1'b0
-  ,e_cef_imm0                            = 1'b1
+  ,e_cef_src_a                           = 1'b1
 } bp_cce_inst_cef_sel_e;
 
 `define bp_cce_inst_cef_sel_width $bits(bp_cce_inst_cef_sel_e)
@@ -641,7 +647,7 @@ typedef enum logic {
 // COF
 typedef enum logic {
   e_cof_logic                            = 1'b0
-  ,e_cof_imm0                            = 1'b1
+  ,e_cof_src_a                           = 1'b1
 } bp_cce_inst_cof_sel_e;
 
 `define bp_cce_inst_cof_sel_width $bits(bp_cce_inst_cof_sel_e)
@@ -649,7 +655,7 @@ typedef enum logic {
 // CDF
 typedef enum logic {
   e_cdf_logic                            = 1'b0
-  ,e_cdf_imm0                            = 1'b1
+  ,e_cdf_src_a                           = 1'b1
 } bp_cce_inst_cdf_sel_e;
 
 `define bp_cce_inst_cdf_sel_width $bits(bp_cce_inst_cdf_sel_e)
@@ -657,7 +663,7 @@ typedef enum logic {
 // TF
 typedef enum logic {
   e_tf_logic                             = 1'b0
-  ,e_tf_imm0                             = 1'b1
+  ,e_tf_src_a                            = 1'b1
 } bp_cce_inst_tf_sel_e;
 
 `define bp_cce_inst_tf_sel_width $bits(bp_cce_inst_tf_sel_e)
@@ -665,7 +671,7 @@ typedef enum logic {
 // RF
 typedef enum logic {
   e_rf_logic                             = 1'b0
-  ,e_rf_imm0                             = 1'b1
+  ,e_rf_src_a                            = 1'b1
 } bp_cce_inst_rf_sel_e;
 
 `define bp_cce_inst_rf_sel_width $bits(bp_cce_inst_rf_sel_e)
@@ -673,7 +679,7 @@ typedef enum logic {
 // UF
 typedef enum logic {
   e_uf_logic                             = 1'b0
-  ,e_uf_imm0                             = 1'b1
+  ,e_uf_src_a                            = 1'b1
 } bp_cce_inst_uf_sel_e;
 
 `define bp_cce_inst_uf_sel_width $bits(bp_cce_inst_uf_sel_e)
@@ -681,7 +687,7 @@ typedef enum logic {
 // IF
 typedef enum logic {
   e_if_logic                             = 1'b0
-  ,e_if_imm0                             = 1'b1
+  ,e_if_src_a                            = 1'b1
 } bp_cce_inst_if_sel_e;
 
 `define bp_cce_inst_if_sel_width $bits(bp_cce_inst_if_sel_e)
@@ -689,7 +695,7 @@ typedef enum logic {
 // NWBF
 typedef enum logic {
   e_nwbf_lce_resp                        = 1'b0
-  ,e_nwbf_imm0                           = 1'b1
+  ,e_nwbf_src_a                          = 1'b1
 } bp_cce_inst_nwbf_sel_e;
 
 `define bp_cce_inst_nwbf_sel_width $bits(bp_cce_inst_nwbf_sel_e)
@@ -697,7 +703,7 @@ typedef enum logic {
 // SF
 typedef enum logic {
   e_sf_logic                             = 1'b0
-  ,e_sf_imm0                             = 1'b1
+  ,e_sf_src_a                            = 1'b1
 } bp_cce_inst_sf_sel_e;
 
 `define bp_cce_inst_sf_sel_width $bits(bp_cce_inst_sf_sel_e)

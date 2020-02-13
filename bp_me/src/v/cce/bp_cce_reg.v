@@ -64,10 +64,13 @@ module bp_cce_reg
    , input                                                                 gad_cached_owned_flag_i
    , input                                                                 gad_cached_dirty_flag_i
 
+   , input                                                                 stall_i
+
    // Register outputs
    , output logic [mshr_width_lp-1:0]                                      mshr_o
    , output logic [`bp_cce_inst_num_gpr-1:0][`bp_cce_inst_gpr_width-1:0]   gpr_o
    , output bp_coh_states_e                                                coh_state_o
+   , output logic                                                          auto_fwd_msg_o
 
   );
 
@@ -90,10 +93,12 @@ module bp_cce_reg
   bp_cce_mshr_s                                                mshr_r, mshr_n;
   logic [`bp_cce_inst_num_gpr-1:0][`bp_cce_inst_gpr_width-1:0] gpr_r, gpr_n;
   bp_coh_states_e                                              coh_state_r, coh_state_n;
+  logic                                                        auto_fwd_msg_r, auto_fwd_msg_n;
 
   assign mshr_o = mshr_r;
   assign gpr_o = gpr_r;
   assign coh_state_o = coh_state_r;
+  assign auto_fwd_msg_o = auto_fwd_msg_r;
 
   // Next value for any register
   logic [`bp_cce_inst_gpr_width-1:0] gpr_next;
@@ -105,14 +110,23 @@ module bp_cce_reg
                      | (lce_req.msg_type == e_lce_req_type_uc_wr);
   wire lce_resp_nwbf = (lce_resp.msg_type == e_lce_cce_resp_null_wb);
 
+  wire poph = (decoded_inst_i.op == e_op_queue)
+              & (decoded_inst_i.minor_op_u.queue_minor_op == e_poph_op);
+  wire poph_lce_req = poph & (decoded_inst_i.
+
   always_comb begin
     // By default, all registers hold their value
     mshr_n = mshr_r;
     gpr_n = gpr_r;
     coh_state_r = coh_state_n;
+    auto_fwd_msg_r = auto_fwd_msg_n;
 
     // Default Coherence State Register
     coh_state_n = bp_coh_states_e'(src_a_i[0+:$bits(bp_coh_states_e)]);
+
+    // Auto Forward BP Coherence Messages
+    auto_fwd_msg_n = src_a_i[0];
+
 
     // GPRs
     // Only one GPR can be written at a time.
@@ -169,7 +183,7 @@ module bp_cce_reg
 
       // Next Coh State
       // TODO: from move or mem_resp.payload(?)
-      mshr_n.next_coh_state = bp_coh_states_e'(decoded_inst_i.imm[0+:$bits(bp_coh_states_e)]);
+      mshr_n.next_coh_state = bp_coh_states_e'(src_a_i[0+:$bits(bp_coh_states_e)]);
 
       // UC Req Size
       // TODO: from lce_req or move
@@ -187,8 +201,8 @@ module bp_cce_reg
         e_rqf_pending: begin
           mshr_n.flags[e_flag_sel_rqf] = '0; // TODO: v2
         end
-        e_rqf_imm0: begin
-          mshr_n.flags[e_flag_sel_rqf] = decoded_inst_i.imm[0];
+        e_rqf_src_a: begin
+          mshr_n.flags[e_flag_sel_rqf] = src_a_i[0];
         end
         default: begin
           mshr_n.flags[e_flag_sel_rqf] = '0;
@@ -202,8 +216,8 @@ module bp_cce_reg
         e_ucf_pending: begin
           mshr_n.flags[e_flag_sel_ucf] = '0;
         end
-        e_ucf_imm0: begin
-          mshr_n.flags[e_flag_sel_ucf] = decoded_inst_i.imm[0];
+        e_ucf_src_a: begin
+          mshr_n.flags[e_flag_sel_ucf] = src_a_i[0];
         end
         default: begin
           mshr_n.flags[e_flag_sel_ucf] = '0;
@@ -217,8 +231,8 @@ module bp_cce_reg
         e_nerf_pending: begin
           mshr_n.flags[e_flag_sel_nerf] = '0; // TODO: v2
         end
-        e_nerf_imm0: begin
-          mshr_n.flags[e_flag_sel_nerf] = decoded_inst_i.imm[0];
+        e_nerf_src_a: begin
+          mshr_n.flags[e_flag_sel_nerf] = src_a_i[0];
         end
         default: begin
           mshr_n.flags[e_flag_sel_nerf] = '0;
@@ -232,8 +246,8 @@ module bp_cce_reg
         e_ldf_pending: begin
           mshr_n.flags[e_flag_sel_ldf] = '0; // TODO: v2
         end
-        e_ldf_imm0: begin
-          mshr_n.flags[e_flag_sel_ldf] = decoded_inst_i.imm[0];
+        e_ldf_src_a: begin
+          mshr_n.flags[e_flag_sel_ldf] = src_a_i[0];
         end
         default: begin
           mshr_n.flags[e_flag_sel_ldf] = '0;
@@ -244,8 +258,8 @@ module bp_cce_reg
         e_nwbf_lce_resp: begin
           mshr_n.flags[e_flag_sel_nwbf] = lce_resp_nwbf;
         end
-        e_nwbf_imm0: begin
-          mshr_n.flags[e_flag_sel_nwbf] = decoded_inst_i.imm[0];
+        e_nwbf_src_a: begin
+          mshr_n.flags[e_flag_sel_nwbf] = src_a_i[0];
         end
         default: begin
           mshr_n.flags[e_flag_sel_nwbf] = '0;
@@ -256,8 +270,8 @@ module bp_cce_reg
         e_tf_logic: begin
           mshr_n.flags[e_flag_sel_tf] = gad_transfer_flag_i;
         end
-        e_tf_imm0: begin
-          mshr_n.flags[e_flag_sel_tf] = decoded_inst_i.imm[0];
+        e_tf_src_a: begin
+          mshr_n.flags[e_flag_sel_tf] = src_a_i[0];
         end
         default: begin
           mshr_n.flags[e_flag_sel_tf] = '0;
@@ -268,8 +282,8 @@ module bp_cce_reg
         e_pf_logic: begin
           mshr_n.flags[e_flag_sel_pf] = pending_o_i; // RDP instruction
         end
-        e_pf_imm0: begin
-          mshr_n.flags[e_flag_sel_pf] = decoded_inst_i.imm[0];
+        e_pf_src_a: begin
+          mshr_n.flags[e_flag_sel_pf] = src_a_i[0];
         end
         default: begin
           mshr_n.flags[e_flag_sel_pf] = '0;
@@ -280,8 +294,8 @@ module bp_cce_reg
         e_rf_logic: begin
           mshr_n.flags[e_flag_sel_rf] = gad_replacement_flag_i;
         end
-        e_rf_imm0: begin
-          mshr_n.flags[e_flag_sel_rf] = decoded_inst_i.imm[0];
+        e_rf_src_a: begin
+          mshr_n.flags[e_flag_sel_rf] = src_a_i[0];
         end
         default: begin
           mshr_n.flags[e_flag_sel_rf] = '0;
@@ -292,8 +306,8 @@ module bp_cce_reg
         e_uf_logic: begin
           mshr_n.flags[e_flag_sel_uf] = gad_upgrade_flag_i;
         end
-        e_uf_imm0: begin
-          mshr_n.flags[e_flag_sel_uf] = decoded_inst_i.imm[0];
+        e_uf_src_a: begin
+          mshr_n.flags[e_flag_sel_uf] = src_a_i[0];
         end
         default: begin
           mshr_n.flags[e_flag_sel_uf] = '0;
@@ -304,8 +318,8 @@ module bp_cce_reg
         e_if_logic: begin
           mshr_n.flags[e_flag_sel_if] = gad_invalidate_flag_i;
         end
-        e_if_imm0: begin
-          mshr_n.flags[e_flag_sel_if] = decoded_inst_i.imm[0];
+        e_if_src_a: begin
+          mshr_n.flags[e_flag_sel_if] = src_a_i[0];
         end
         default: begin
           mshr_n.flags[e_flag_sel_if] = '0;
@@ -316,8 +330,8 @@ module bp_cce_reg
         e_cf_logic: begin
           mshr_n.flags[e_flag_sel_cf] = gad_cached_flag_i;
         end
-        e_cf_imm0: begin
-          mshr_n.flags[e_flag_sel_cf] = decoded_inst_i.imm[0];
+        e_cf_src_a: begin
+          mshr_n.flags[e_flag_sel_cf] = src_a_i[0];
         end
         default: begin
           mshr_n.flags[e_flag_sel_cf] = '0;
@@ -328,8 +342,8 @@ module bp_cce_reg
         e_cef_logic: begin
           mshr_n.flags[e_flag_sel_cef] = gad_cached_exclusive_flag_i;
         end
-        e_cef_imm0: begin
-          mshr_n.flags[e_flag_sel_cef] = decoded_inst_i.imm[0];
+        e_cef_src_a: begin
+          mshr_n.flags[e_flag_sel_cef] = src_a_i[0];
         end
         default: begin
           mshr_n.flags[e_flag_sel_cef] = '0;
@@ -340,8 +354,8 @@ module bp_cce_reg
         e_cof_logic: begin
           mshr_n.flags[e_flag_sel_cof] = gad_cached_owned_flag_i;
         end
-        e_cof_imm0: begin
-          mshr_n.flags[e_flag_sel_cof] = decoded_inst_i.imm[0];
+        e_cof_src_a: begin
+          mshr_n.flags[e_flag_sel_cof] = src_a_i[0];
         end
         default: begin
           mshr_n.flags[e_flag_sel_cof] = '0;
@@ -352,8 +366,8 @@ module bp_cce_reg
         e_cdf_logic: begin
           mshr_n.flags[e_flag_sel_cdf] = gad_cached_dirty_flag_i;
         end
-        e_cdf_imm0: begin
-          mshr_n.flags[e_flag_sel_cdf] = decoded_inst_i.imm[0];
+        e_cdf_src_a: begin
+          mshr_n.flags[e_flag_sel_cdf] = src_a_i[0];
         end
         default: begin
           mshr_n.flags[e_flag_sel_cdf] = '0;
@@ -364,8 +378,8 @@ module bp_cce_reg
         e_lef_logic: begin
           mshr_n.flags[e_flag_sel_lef] = dir_lru_cached_excl_i;
         end
-        e_lef_imm0: begin
-          mshr_n.flags[e_flag_sel_lef] = decoded_inst_i.imm[0];
+        e_lef_src_a: begin
+          mshr_n.flags[e_flag_sel_lef] = src_a_i[0];
         end
         default: begin
           mshr_n.flags[e_flag_sel_lef] = '0;
@@ -377,8 +391,8 @@ module bp_cce_reg
         e_sf_logic: begin
           mshr_n.flags[e_flag_sel_sf] = decoded_inst_i.spec_bits.spec;
         end
-        e_sf_imm0: begin
-          mshr_n.flags[e_flag_sel_sf] = decoded_inst_i.imm[0];
+        e_sf_src_a: begin
+          mshr_n.flags[e_flag_sel_sf] = src_a_i[0];
         end
         default: begin
           mshr_n.flags[e_flag_sel_sf] = '0;
@@ -387,7 +401,11 @@ module bp_cce_reg
 
       // TODO: flags or flags_and_mask as source
       // TODO: writing flags may need to stall with something?
-      //mshr_n.flags = src_a_i;
+      if ((decoded_inst_i.dst_sel == e_dst_sel_special)
+          & ((decoded_inst_i.dst.special == e_opd_flags)
+             | (decoded_inst_i.dst.special == e_opd_flags_and_mask))) begin
+        mshr_n.flags = src_a_i[0+:`bp_cce_inst_num_flags];
+      end
 
     end
 
@@ -395,6 +413,13 @@ module bp_cce_reg
 
 
   // TODO: register write conditions
+  // TODO: only commit instruction if not stalling (in general)
+  // However, there may be conditions where a register needs to be written during a stall
+
+  // TODO: what state can be written during a microcode instruction stall?
+  // What actions can happen during ucode stall?
+  // - only action taken that is not directed by ucode is message unit auto-forwarding
+  //   mem_resp to lce_cmd, auto-dequeue lce_resp (coh_ack)
 
   always_ff @(posedge clk_i)
   begin
@@ -402,7 +427,29 @@ module bp_cce_reg
       mshr_r <= '0;
       gpr_r <= '0;
       coh_state_r <= e_COH_I;
+      auto_fwd_msg_r <= 1'b1;
     end else begin
+
+      // Auto Forward Message control
+      if (~stall_i & decoded_inst_i.auto_fwd_msg_w_v) begin
+        auto_fwd_msg_r <= auto_fwd_msg_n;
+      end
+
+      // Default Coherence State for MSHR
+      if (~stall_i & decoded_inst_i.coh_state_w_v) begin
+        coh_state_r <= coh_state_n;
+      end
+
+      // GPR
+      for (int i = 0; i < `bp_cce_inst_num_gpr; i=i+1) begin
+        if (~stall_i & decoded_inst_i.gpr_w_mask[i]) begin
+          gpr_r[i] <= gpr_n[i];
+        end
+      end
+
+
+
+
       // MSHR writes
       if (decoded_inst_i.mshr_clear) begin
         mshr_r <= mshr_n;
@@ -442,18 +489,6 @@ module bp_cce_reg
         if (decoded_inst_i.uc_req_size_w_v) begin
           mshr_r.uc_req_size <= mshr_n.uc_req_size;
         end
-      end
-
-      // GPR
-      for (int i = 0; i < `bp_cce_inst_num_gpr; i=i+1) begin
-        if (decoded_inst_i.gpr_w_mask[i]) begin
-          gpr_r[i] <= gpr_n[i];
-        end
-      end
-
-      if (decoded_inst_i.mov_dst_w_v & (decoded_inst_i.dst_sel == e_dst_sel_special)
-          & (decoded_inst_i.dst.special == e_dst_coh_state)) begin
-        coh_state_r <= coh_state_n;
       end
 
     end // else

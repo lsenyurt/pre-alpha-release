@@ -89,9 +89,17 @@ module bp_cce_inst_stall
     // Directory is busy after a read - be safe and block execution until read is done
     stall_o |= dir_busy_i;
 
+
+    // TODO: all other stalls that can happen because message unit is doing something
+
+    // TODO: should an invalidate instruction cause the ucode to stall until message unit
+    // indicates that it is completely done with sending messages?
+    // - This still requires the message unit being able to write the directory
+
     // Message Unit Structural Hazards
     stall_o |= (decoded_inst_i.pending_w_v & msg_pending_w_busy_i);
     stall_o |= (decoded_inst_i.dir_w_v & msg_dir_w_busy_i);
+    stall_o |= (decoded_inst_i.dir_r_v & msg_dir_w_busy_i);
     stall_o |= (decoded_inst_i.spec_r_v & msg_spec_r_busy_i);
     stall_o |= (decoded_inst_i.spec_w_v & msg_spec_w_busy_i);
     stall_o |= (decoded_inst_i.lce_cmd_v & msg_lce_cmd_busy_i);
