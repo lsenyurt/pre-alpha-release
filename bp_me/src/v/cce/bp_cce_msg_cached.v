@@ -18,6 +18,11 @@
 // dequeue data packets from the LCE response channel, or uncached stores will dequeue
 // data packet from LCE request channel. In these cases, popq should then only dequeue the header.
 
+  // TODO: what state can be written during a microcode instruction stall?
+  // What actions can happen during ucode stall?
+  // - only action taken that is not directed by ucode is message unit auto-forwarding
+  //   mem_resp to lce_cmd, auto-dequeue lce_resp (coh_ack)
+
 
 
 module bp_cce_msg_cached

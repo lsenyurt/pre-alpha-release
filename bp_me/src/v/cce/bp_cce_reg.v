@@ -52,11 +52,9 @@ module bp_cce_reg
    , input                                                                 pending_i
 
    // From Directory - RDW operation generates LRU Cached Exclusive flag and LRU entry address
-   // TODO: these can be written while the directory is busy (and ucode is thus stalling)
    , input                                                                 dir_lru_cached_excl_i
    , input [paddr_width_p-1:0]                                             dir_lru_addr_i
    // From Directory - RDE operation writes address to GPR
-   // TODO: this will be written while directory is busy (and ucode is thus stalling)
    , input [paddr_width_p-1:0]                                             dir_addr_i
    , input bp_cce_inst_opd_gpr_e                                           dir_addr_dst_gpr
 
@@ -104,9 +102,9 @@ module bp_cce_reg
   bp_coh_states_e                                              coh_state_r, coh_state_n;
   logic                                                        auto_fwd_msg_r, auto_fwd_msg_n;
 
-  assign mshr_o = mshr_r;
-  assign gpr_o = gpr_r;
-  assign coh_state_o = coh_state_r;
+  assign mshr_o         = mshr_r;
+  assign gpr_o          = gpr_r;
+  assign coh_state_o    = coh_state_r;
   assign auto_fwd_msg_o = auto_fwd_msg_r;
 
   // Write mask for GPRs
@@ -115,124 +113,31 @@ module bp_cce_reg
   // On a stall, the mask is set to '0 by default.
   logic [`bp_cce_inst_num_gpr-1:0]                             gpr_w_mask;
 
-
-  // TODO: register write conditions
-  // TODO: only commit instruction if not stalling (in general)
-  // However, there may be conditions where a register needs to be written during a stall
-
-  // TODO: what state can be written during a microcode instruction stall?
-  // What actions can happen during ucode stall?
-  // - only action taken that is not directed by ucode is message unit auto-forwarding
-  //   mem_resp to lce_cmd, auto-dequeue lce_resp (coh_ack)
-
-  always_ff @(posedge clk_i)
-  begin
-    if (reset_i) begin
-      mshr_r <= '0;
-      gpr_r <= '0;
-      coh_state_r <= e_COH_I;
-      auto_fwd_msg_r <= 1'b1;
-    end else begin
-
-      // Auto Forward Message control - only from move, only when not stalling
-      if (~stall_i & decoded_inst_i.auto_fwd_msg_w_v) begin
-        auto_fwd_msg_r <= auto_fwd_msg_n;
-      end
-
-      // Default Coherence State for MSHR - only from move, only when not stalling
-      if (~stall_i & decoded_inst_i.coh_state_w_v) begin
-        coh_state_r <= coh_state_n;
-      end
-
-      // GPR
-      for (int i = 0; i < `bp_cce_inst_num_gpr; i=i+1) begin
-        if (gpr_w_mask[i]) begin
-          gpr_r[i] <= gpr_next;
-        end
-      end
-
-
-
-
-      // MSHR writes
-      if (decoded_inst_i.mshr_clear) begin
-        mshr_r <= mshr_n;
-      end else begin
-        if (decoded_inst_i.req_w_v) begin
-          mshr_r.lce_id <= mshr_n.lce_id;
-          mshr_r.paddr <= mshr_n.paddr;
-        end
-        if (decoded_inst_i.req_addr_way_w_v) begin
-          mshr_r.way_id <= mshr_n.way_id;
-        end
-        if (decoded_inst_i.lru_way_w_v) begin
-          mshr_r.lru_way_id <= mshr_n.lru_way_id;
-        end
-        if (decoded_inst_i.owner_lce_w_v) begin
-          mshr_r.owner_lce_id <= mshr_n.owner_lce_id;
-          mshr_r.owner_way_id <= mshr_n.owner_way_id;
-        end
-        // Flags
-        for (int i = 0; i < `bp_cce_inst_num_flags; i=i+1) begin
-          if (decoded_inst_i.flag_mask_w_v[i]) begin
-            mshr_r.flags[i] <= mshr_n.flags[i];
-          end
-        end
-        // TODO: ensure that this write occurs even if stalling current instruction
-        // because directory is busy
-        if (dir_lru_v_i) begin
-          mshr_r.flags[e_flag_sel_lef] <= mshr_n.flags[e_flag_sel_lef];
-          mshr_r.lru_paddr <= mshr_n.lru_paddr;
-        end
-        // Next Coh State
-        if (decoded_inst_i.mov_dst_w_v & (decoded_inst_i.dst_sel == e_dst_sel_special)
-            & (decoded_inst_i.dst.special == e_dst_next_coh_state)) begin
-          mshr_r.next_coh_state <= mshr_n.next_coh_state;
-        end
-
-        if (decoded_inst_i.uc_req_size_w_v) begin
-          mshr_r.uc_req_size <= mshr_n.uc_req_size;
-        end
-      end
-
-    end // else
-  end // always_ff
-
-
-
-
-  // Next value for any register
-
-  // Derived control signals
-
   // Move operation
-  wire mov_op = (decoded_inst_i.op == e_op_data);
+  wire mov_op        = (decoded_inst_i.op == e_op_data);
   // Queue operation
-  wire queue_op = (decoded_inst_i.op == e_op_queue);
+  wire queue_op      = (decoded_inst_i.op == e_op_queue);
 
   // Flag next values
-  wire lce_req_rqf = (lce_req.msg_type == e_lce_req_type_wr)
-                     | (lce_req.msg_type == e_lce_req_type_uc_wr);
-  wire lce_req_ucf = (lce_req.msg_type == e_lce_req_type_uc_rd)
-                     | (lce_req.msg_type == e_lce_req_type_uc_wr);
+  wire lce_req_rqf   = (lce_req.msg_type == e_lce_req_type_wr)
+                       | (lce_req.msg_type == e_lce_req_type_uc_wr);
+  wire lce_req_ucf   = (lce_req.msg_type == e_lce_req_type_uc_rd)
+                       | (lce_req.msg_type == e_lce_req_type_uc_wr);
   wire lce_resp_nwbf = (lce_resp.msg_type == e_lce_cce_resp_null_wb);
-  wire lce_req_nerf = (lce_req.header.non_exclusive == e_lce_req_non_excl);
-  wire lce_req_ldf = (lce_req.header.lru_dirty == e_lce_req_lru_dirty);
+  wire lce_req_nerf  = (lce_req.header.non_exclusive == e_lce_req_non_excl);
+  wire lce_req_ldf   = (lce_req.header.lru_dirty == e_lce_req_lru_dirty);
 
+  // operation writes all flags in bulk
   wire write_all_flags = ((decoded_inst_i.dst_sel == e_dst_sel_special)
-                          & ((decoded_inst_i.dst.special == e_opd_flags)
-                             | (decoded_inst_i.dst.special == e_opd_flags_and_mask)));
+                          & ((decoded_inst_i.dst.special == e_opd_flags));
 
-
+  // Combinational Logic - next values for registers and write masks
   always_comb begin
     // By default, all registers hold their value
     mshr_n = mshr_r;
     gpr_next = '0;
     coh_state_r = coh_state_n;
     auto_fwd_msg_r = auto_fwd_msg_n;
-
-    // TODO: revise to account for message unit interactions and stalls
-    // Note: choosing the next state is unaffected by the ucode stalling
 
     // Auto Forward BP Coherence Messages
     auto_fwd_msg_n = src_a_i[0];
@@ -285,6 +190,11 @@ module bp_cce_reg
       mshr_n.owner_way_id = src_a_i[0+:lce_assoc_width_lp];
       mshr_n.lru_paddr = src_a_i[0+:paddr_width_p];
 
+      // Flags - by default, next value comes from src_a
+      for (int i = 0; i < `bp_cce_inst_num_flags; i=i+1) begin
+        mshr_n.flags[i] = src_a_i[0];
+      end
+
       // Overrides from defaults - poph
       if (decoded_inst_i.poph) begin
         if (decoded_inst_i.popq_sel == e_src_q_sel_lce_req) begin
@@ -293,10 +203,15 @@ module bp_cce_reg
           mshr_n.lru_way_id = lce_req.header.lru_way_id;
           mshr_n.uc_req_size = lce_req.header.uc_size;
           mshr_n.data_length = lce_req.header.data_length;
+          mshr_n.flags[e_flag_sel_rqf] = lce_req_rqf;
+          mshr_n.flags[e_flag_sel_ucf] = lce_req_ucf;
+          mshr_n.flags[e_flag_sel_nerf] = lce_req_nerf;
+          mshr_n.flags[e_flag_sel_ldf] = lce_req_ldf;
         end else if (decoded_inst_i.popq_sel == e_src_q_sel_lce_resp) begin
           mshr_n.lce_id = lce_resp.header.src_id;
           mshr_n.paddr = lce_resp.header.addr;
           mshr_n.data_length = lce_resp.header.data_length;
+          mshr_n.flags[e_flag_sel_nwbf] = lce_resp_nwbf;
         end else if (decoded_inst_i.popq_sel == e_src_q_sel_mem_resp) begin
           mshr_n.lce_id = mem_resp.header.payload.lce_id;
           mshr_n.paddr = mem_resp.header.addr;
@@ -304,7 +219,13 @@ module bp_cce_reg
           // TODO: should MSHR capture mem response size (need conversion)?
           //mshr_n.data_length = mem_resp.header.size;
           mshr_n.way_id = mem_resp.header.payload.way_id;
+          mshr_n.flags[e_flag_sel_sf] = mem_resp.header.payload.speculative;
         end else if (decoded_inst_i.popq_sel == e_src_q_sel_pending) begin
+          // TODO: if implementing pending queue
+          mshr_n.flags[e_flag_sel_rqf] = '0;
+          mshr_n.flags[e_flag_sel_ucf] = '0;
+          mshr_n.flags[e_flag_sel_nerf] = '0;
+          mshr_n.flags[e_flag_sel_ldf] = '0;
         end
       end
 
@@ -313,229 +234,111 @@ module bp_cce_reg
         mshr_n.way_id = gad_req_addr_way_i;
         mshr_n.owner_lce_id = gad_owner_lce_i;
         mshr_n.owner_way_id = gad_owner_lce_way_i;
+          mshr_n.flags[e_flag_sel_tf] = gad_transfer_flag_i;
+          mshr_n.flags[e_flag_sel_rf] = gad_replacement_flag_i;
+          mshr_n.flags[e_flag_sel_uf] = gad_upgrade_flag_i;
+          mshr_n.flags[e_flag_sel_if] = gad_invalidate_flag_i;
+          mshr_n.flags[e_flag_sel_cf] = gad_cached_flag_i;
+          mshr_n.flags[e_flag_sel_cef] = gad_cached_exclusive_flag_i;
+          mshr_n.flags[e_flag_sel_cof] = gad_cached_owned_flag_i;
+          mshr_n.flags[e_flag_sel_cdf] = gad_cached_dirty_flag_i;
       end
 
       // Overrides from defaults - Directory
       if (dir_lru_v_i) begin
         mshr_n.lru_paddr = dir_lru_addr_i;
+        mshr_n.flags[e_flag_sel_lef] = dir_lru_cached_excl_i;
       end
 
-      // Flags
-      case (decoded_inst_i.rqf_sel)
-        e_rqf_lce_req: begin
-          mshr_n.flags[e_flag_sel_rqf] = lce_req_rqf;
-        end
-        e_rqf_pending: begin
-          mshr_n.flags[e_flag_sel_rqf] = '0; // TODO: v2
-        end
-        e_rqf_src_a: begin
-          mshr_n.flags[e_flag_sel_rqf] = src_a_i[0];
-        end
-        default: begin
-          mshr_n.flags[e_flag_sel_rqf] = '0;
-        end
-      endcase
+      // RDP instruction writes pending flag
+      if (decoded_inst_i.pending_r_v) begin
+        mshr_n.flags[e_flag_sel_pf] = pending_i;
+      end
 
-      case (decoded_inst_i.ucf_sel)
-        e_ucf_lce_req: begin
-          mshr_n.flags[e_flag_sel_ucf] = lce_req_ucf;
-        end
-        e_ucf_pending: begin
-          mshr_n.flags[e_flag_sel_ucf] = '0;
-        end
-        e_ucf_src_a: begin
-          mshr_n.flags[e_flag_sel_ucf] = src_a_i[0];
-        end
-        default: begin
-          mshr_n.flags[e_flag_sel_ucf] = '0;
-        end
-      endcase
-
-      case (decoded_inst_i.nerf_sel)
-        e_nerf_lce_req: begin
-          mshr_n.flags[e_flag_sel_nerf] = lce_req_nerf;
-        end
-        e_nerf_pending: begin
-          mshr_n.flags[e_flag_sel_nerf] = '0; // TODO: v2
-        end
-        e_nerf_src_a: begin
-          mshr_n.flags[e_flag_sel_nerf] = src_a_i[0];
-        end
-        default: begin
-          mshr_n.flags[e_flag_sel_nerf] = '0;
-        end
-      endcase
-
-      case (decoded_inst_i.ldf_sel)
-        e_ldf_lce_req: begin
-          mshr_n.flags[e_flag_sel_ldf] = lce_req_ldf;
-        end
-        e_ldf_pending: begin
-          mshr_n.flags[e_flag_sel_ldf] = '0; // TODO: v2
-        end
-        e_ldf_src_a: begin
-          mshr_n.flags[e_flag_sel_ldf] = src_a_i[0];
-        end
-        default: begin
-          mshr_n.flags[e_flag_sel_ldf] = '0;
-        end
-      endcase
-
-      case (decoded_inst_i.nwbf_sel)
-        e_nwbf_lce_resp: begin
-          mshr_n.flags[e_flag_sel_nwbf] = lce_resp_nwbf;
-        end
-        e_nwbf_src_a: begin
-          mshr_n.flags[e_flag_sel_nwbf] = src_a_i[0];
-        end
-        default: begin
-          mshr_n.flags[e_flag_sel_nwbf] = '0;
-        end
-      endcase
-
-      case (decoded_inst_i.tf_sel)
-        e_tf_logic: begin
-          mshr_n.flags[e_flag_sel_tf] = gad_transfer_flag_i;
-        end
-        e_tf_src_a: begin
-          mshr_n.flags[e_flag_sel_tf] = src_a_i[0];
-        end
-        default: begin
-          mshr_n.flags[e_flag_sel_tf] = '0;
-        end
-      endcase
-
-      case (decoded_inst_i.pf_sel)
-        e_pf_logic: begin
-          mshr_n.flags[e_flag_sel_pf] = pending_i; // RDP instruction
-        end
-        e_pf_src_a: begin
-          mshr_n.flags[e_flag_sel_pf] = src_a_i[0];
-        end
-        default: begin
-          mshr_n.flags[e_flag_sel_pf] = '0;
-        end
-      endcase
-
-      case (decoded_inst_i.rf_sel)
-        e_rf_logic: begin
-          mshr_n.flags[e_flag_sel_rf] = gad_replacement_flag_i;
-        end
-        e_rf_src_a: begin
-          mshr_n.flags[e_flag_sel_rf] = src_a_i[0];
-        end
-        default: begin
-          mshr_n.flags[e_flag_sel_rf] = '0;
-        end
-      endcase
-
-      case (decoded_inst_i.uf_sel)
-        e_uf_logic: begin
-          mshr_n.flags[e_flag_sel_uf] = gad_upgrade_flag_i;
-        end
-        e_uf_src_a: begin
-          mshr_n.flags[e_flag_sel_uf] = src_a_i[0];
-        end
-        default: begin
-          mshr_n.flags[e_flag_sel_uf] = '0;
-        end
-      endcase
-
-      case (decoded_inst_i.if_sel)
-        e_if_logic: begin
-          mshr_n.flags[e_flag_sel_if] = gad_invalidate_flag_i;
-        end
-        e_if_src_a: begin
-          mshr_n.flags[e_flag_sel_if] = src_a_i[0];
-        end
-        default: begin
-          mshr_n.flags[e_flag_sel_if] = '0;
-        end
-      endcase
-
-      case (decoded_inst_i.cf_sel)
-        e_cf_logic: begin
-          mshr_n.flags[e_flag_sel_cf] = gad_cached_flag_i;
-        end
-        e_cf_src_a: begin
-          mshr_n.flags[e_flag_sel_cf] = src_a_i[0];
-        end
-        default: begin
-          mshr_n.flags[e_flag_sel_cf] = '0;
-        end
-      endcase
-
-      case (decoded_inst_i.cef_sel)
-        e_cef_logic: begin
-          mshr_n.flags[e_flag_sel_cef] = gad_cached_exclusive_flag_i;
-        end
-        e_cef_src_a: begin
-          mshr_n.flags[e_flag_sel_cef] = src_a_i[0];
-        end
-        default: begin
-          mshr_n.flags[e_flag_sel_cef] = '0;
-        end
-      endcase
-
-      case (decoded_inst_i.cof_sel)
-        e_cof_logic: begin
-          mshr_n.flags[e_flag_sel_cof] = gad_cached_owned_flag_i;
-        end
-        e_cof_src_a: begin
-          mshr_n.flags[e_flag_sel_cof] = src_a_i[0];
-        end
-        default: begin
-          mshr_n.flags[e_flag_sel_cof] = '0;
-        end
-      endcase
-
-      case (decoded_inst_i.cdf_sel)
-        e_cdf_logic: begin
-          mshr_n.flags[e_flag_sel_cdf] = gad_cached_dirty_flag_i;
-        end
-        e_cdf_src_a: begin
-          mshr_n.flags[e_flag_sel_cdf] = src_a_i[0];
-        end
-        default: begin
-          mshr_n.flags[e_flag_sel_cdf] = '0;
-        end
-      endcase
-
-      // TODO: bug: directory outputs LRU info after instruction has been executed
-      case (decoded_inst_i.lef_sel)
-        e_lef_logic: begin
-          mshr_n.flags[e_flag_sel_lef] = dir_lru_cached_excl_i;
-        end
-        e_lef_src_a: begin
-          mshr_n.flags[e_flag_sel_lef] = src_a_i[0];
-        end
-        default: begin
-          mshr_n.flags[e_flag_sel_lef] = '0;
-        end
-      endcase
-
-      // TODO: SF flag might not be correct; it also might not be used
-      case (decoded_inst_i.sf_sel)
-        e_sf_logic: begin
-          mshr_n.flags[e_flag_sel_sf] = decoded_inst_i.spec_bits.spec;
-        end
-        e_sf_src_a: begin
-          mshr_n.flags[e_flag_sel_sf] = src_a_i[0];
-        end
-        default: begin
-          mshr_n.flags[e_flag_sel_sf] = '0;
-        end
-      endcase
-
-      // TODO: writing flags may need to stall with something?
+      // Flag operation - ldflags, ldflagsi, or clf
       if (write_all_flags) begin
         mshr_n.flags = src_a_i[0+:`bp_cce_inst_num_flags];
       end
 
-    end
+    end // MSHR
 
-  end
+  end // always_comb
 
+  // Sequential Logic - register state updates
+  always_ff @(posedge clk_i)
+  begin
+    if (reset_i) begin
+      mshr_r <= '0;
+      gpr_r <= '0;
+      coh_state_r <= e_COH_I;
+      auto_fwd_msg_r <= 1'b1;
+    end else begin
 
+      // Auto Forward Message control - only from move, only when not stalling
+      if (~stall_i & decoded_inst_i.auto_fwd_msg_w_v) begin
+        auto_fwd_msg_r <= auto_fwd_msg_n;
+      end
+
+      // Default Coherence State for MSHR - only from move, only when not stalling
+      if (~stall_i & decoded_inst_i.coh_state_w_v) begin
+        coh_state_r <= coh_state_n;
+      end
+
+      // GPR
+      for (int i = 0; i < `bp_cce_inst_num_gpr; i=i+1) begin
+        if (gpr_w_mask[i]) begin
+          gpr_r[i] <= gpr_next;
+        end
+      end
+
+      // MSHR writes - these occur on a per MSHR item basis
+      // By default, all fields can only be written while not stalling
+      if (~stall_i & decoded_inst_i.mshr_clear) begin
+        mshr_r <= mshr_n;
+      end else begin
+        if (~stall_i & decoded_inst_i.lce_w_v) begin
+          mshr_r.lce_id <= mshr_n.lce_id;
+        end
+        if (~stall_i & decoded_inst_i.addr_w_v) begin
+          mshr_r.paddr <= mshr_n.paddr;
+        end
+        if (decoded_inst_i.way_w_v) begin
+          mshr_r.way_id <= mshr_n.way_id;
+        end
+        if (decoded_inst_i.lru_way_w_v) begin
+          mshr_r.lru_way_id <= mshr_n.lru_way_id;
+        end
+        // LRU address can also be written while stalling, from directory
+        if ((~stall_i & decoded_inst_i.lru_way_w_v) | dir_lru_v_i) begin
+          mshr_r.lru_paddr <= mshr_n.lru_paddr;
+        end
+        if (~stall_i & decoded_inst_i.owner_lce_w_v) begin
+          mshr_r.owner_lce_id <= mshr_n.owner_lce_id;
+        end
+        if (~stall_i & decoded_inst_i.owner_way_w_v) begin
+          mshr_r.owner_way_id <= mshr_n.owner_way_id;
+        end
+        if (decoded_inst_i.next_coh_state_w_v) begin
+          mshr_r.next_coh_state <= mshr_n.next_coh_state;
+        end
+        for (int i = 0; i < `bp_cce_inst_num_flags; i=i+1) begin
+          if (~stall_i & decoded_inst_i.flag_mask_w_v[i]) begin
+            mshr_r.flags[i] <= mshr_n.flags[i];
+          end
+        end
+        // LRU Cached Exclusive Flag can also be written while stalling, from directory
+        if (dir_lru_v_i) begin
+          mshr_r.flags[e_flag_sel_lef] <= mshr_n.flags[e_flag_sel_lef];
+        end
+        if (decoded_inst_i.uc_req_size_w_v) begin
+          mshr_r.uc_req_size <= mshr_n.uc_req_size;
+        end
+        if (decoded_inst_i.data_length_w_v) begin
+          mshr_r.data_length <= mshr_r.data_length;
+        end
+      end
+
+    end // else
+  end // always_ff
 
 endmodule
