@@ -234,6 +234,7 @@ module bp_cce_msg
       ,.pending_w_busy_o(pending_w_busy_o)
       ,.lce_cmd_busy_o(lce_cmd_busy_o)
       ,.msg_inv_busy_o(msg_inv_busy_o)
+      ,.busy_o(busy_o)
 
       ,.gpr_i(gpr_i)
       ,.sharers_hits_i(sharers_hits_i)

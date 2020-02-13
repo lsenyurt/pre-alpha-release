@@ -83,7 +83,8 @@ module bp_cce_msg_cached
    // arbitration signals to instruction decode
    , output logic                                      pending_w_busy_o
    , output logic                                      lce_cmd_busy_o
-   , output logic                                      msg_inv_busy_o
+   // Message unit is busy doing a ucode operation over multiple cycles
+   , output logic                                      busy_o
 
    , input [`bp_cce_inst_num_gpr-1:0][`bp_cce_inst_gpr_width-1:0] gpr_i
 
@@ -307,7 +308,7 @@ module bp_cce_msg_cached
 
     pending_w_busy_o = '0;
     lce_cmd_busy_o = '0;
-    msg_inv_busy_o = '0;
+    busy_o = '0;
 
     lce_id_o = '0;
     lce_way_o = '0;
@@ -725,7 +726,10 @@ module bp_cce_msg_cached
 
         // Invalidation command
         else if (decoded_inst_i.inv_cmd_v) begin
-          msg_inv_busy_o = 1'b1;
+          // busy_o is not raised this cycle
+          // in the first cycle, the instruction is "executed" and the ucode will move on
+          // to the next instruction. The following instruction will then be blocked while
+          // this unit is in the INV_CMD state so that the invalidations can finish sending.
 
           state_n = INV_CMD;
 
@@ -796,16 +800,14 @@ module bp_cce_msg_cached
       end // INV_SEND
 
       INV_RESP: begin
+        msg_inv_busy_o = 1'b1;
         if (cnt == '0) begin
-          msg_inv_busy_o = 1'b0;
           state_n = READY;
         end else begin
-          msg_inv_busy_o = 1'b1;
           if (lce_resp_v_i & (lce_resp.msg_type == e_lce_cce_inv_ack)) begin
             lce_resp_yumi_o = 1'b1;
             cnt_dec = 1'b1;
             if (cnt == 'd1) begin
-              msg_inv_busy_o = 1'b0;
               state_n = READY;
             end
           end

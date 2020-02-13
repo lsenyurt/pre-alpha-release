@@ -104,6 +104,20 @@ module bp_cce_inst_decode
       decoded_inst_o.minor_op_u = inst_r.minor_op_u;
 
       // TODO: decoder
+
+      // Pushq and Popq operation details - used for decoding and fetch control
+      decoded_inst_o.pushq = (op == e_op_queue) & (minor_op_u == e_pushq_op);
+      decoded_inst_o.popq = (op == e_op_queue) & (minor_op_u == e_popq_op);
+      decoded_inst_o.poph = (op == e_op_queue) & (minor_op_u == e_poph_op);
+      decoded_inst_o.pushq_qsel = (decoded_inst_o.pushq)
+                                  ? queue_op_s.op.pushq.dst_q
+                                  : bp_cce_inst_dst_q_sel_e'('0);
+      decoded_inst_o.popq_qsel = (decoded_inst_o.poph | decoded_inst_o.popq)
+                                 ? queue_op_s.op.popq.src_q
+                                 : bp_cce_inst_src_q_sel_e'('0);
+
+      // TODO: poph sets src_a properly to lce_resp.msg_type or mem_resp.msg_type
+
     end
 
   end
@@ -159,13 +173,6 @@ module bp_cce_inst_decode
     decoded_inst_o = '0;
     pc_stall_o = '0;
     pc_branch_target_o = '0;
-
-    // Pushq and Popq operation details - used for decoding and fetch control
-    pushq_op = (op == e_op_queue) & (minor_op_u == e_pushq_op);
-    popq_op = (op == e_op_queue) & (minor_op_u == e_popq_op);
-    poph_op = (op == e_op_queue) & (minor_op_u == e_poph_op);
-    pushq_qsel = queue_op_s.op.pushq.dst_q;
-    popq_qsel = queue_op_s.op.popq.src_q;
 
     decoded_inst_v_o = inst_v_i;
     decoded_inst_o.op = op;

@@ -58,10 +58,6 @@
  * Major Op Codes
  */
 
-// TODO: a couple ideas on useful instructions:
-// 1. bitfield select - can do with multiple ops
-// copy sharers hit vector to GPR?
-
 typedef enum logic [2:0] {
   e_op_alu                               = 3'b000    // ALU operation
   ,e_op_branch                           = 3'b001    // Branch (control flow) operation
@@ -126,6 +122,7 @@ typedef enum logic [3:0] {
   ,e_movfg_op                            = 4'b0011   // Move Flag to GPR[0]
   ,e_movgf_op                            = 4'b0100   // Move GPR[0] to Flag
   ,e_movpg_op                            = 4'b0101   // Move Param to GPR
+  ,e_movgp_op                            = 4'b0110   // Move GPR to Param
   ,e_movi_op                             = 4'b1000   // Move Immediate to GPR
   ,e_movis_op                            = 4'b1001   // Move Immediate to Special Register
   ,e_clm_op                              = 4'b1111   // Clear MSHR register
@@ -173,6 +170,7 @@ typedef enum logic [3:0] {
   ,e_rde_op                              = 4'b0010   // Read Directory Entry
   ,e_wdp_op                              = 4'b0100   // Write Pending Bit
   ,e_clp_op                              = 4'b0101   // Clear Pending Bit
+  // TODO: clr unimplemented as of now
   ,e_clr_op                              = 4'b0110   // Clear Directory Row
   ,e_wde_op                              = 4'b0111   // Write Directory Entry
   ,e_wds_op                              = 4'b1000   // Write Directory Entry State
@@ -201,6 +199,8 @@ typedef enum logic [3:0] {
   ,e_specq_op                            = 4'b0101   // Write or read speculative access bits
   // TODO: we may want to send invalidations to all but owner LCE, then send downgrade to owner
   // How do we specify this to directory?
+  // for MESI, a downgrade would be transfer & request is read
+  // invalidates would be request is write
   ,e_inv_op                              = 4'b1000   // Send all Invalidations based on sharers vector
 } bp_cce_inst_minor_queue_op_e;
 
@@ -562,8 +562,8 @@ typedef enum logic [1:0] {
 
 // Destination queue select
 typedef enum logic [1:0] {
-  e_dst_q_lce_cmd                        = 2'b00
-  ,e_dst_q_mem_cmd                       = 2'b01
+  e_dst_q_sel_lce_cmd                    = 2'b00
+  ,e_dst_q_sel_mem_cmd                   = 2'b01
 } bp_cce_inst_dst_q_sel_e;
 
 `define bp_cce_inst_dst_q_sel_width $bits(bp_cce_inst_dst_q_sel_e)
@@ -1052,7 +1052,12 @@ typedef struct packed {
   logic                                    spec_state_v;
   bp_cce_spec_s                            spec_bits;
 
-  // Message Unit
+  // Message Unit / Messages
+  logic                                    poph;
+  logic                                    popq;
+  logic                                    pushq;
+  bp_cce_inst_dst_q_sel_e                  pushq_qsel;
+  bp_cce_inst_src_q_sel_e                  popq_qsel;
   logic                                    lce_req_yumi;
   logic                                    lce_resp_yumi;
   logic                                    mem_resp_yumi;
@@ -1074,7 +1079,7 @@ typedef struct packed {
   logic                                    owner_lce_w_v;
   logic                                    owner_way_w_v;
   logic                                    next_coh_state_w_v;
-  // Flag write mask - for instructions that implicitly write flags, e.g., GAD, popq
+  // Flag write mask - for instructions that write flags, e.g., GAD, poph, mov, sf
   logic [`bp_cce_inst_num_flags-1:0]       flag_w_v;
   logic                                    uc_req_size_w_v;
   logic                                    data_length_w_v;
