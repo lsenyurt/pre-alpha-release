@@ -105,7 +105,6 @@ module bp_cce
   // MSHR
   `declare_bp_cce_mshr_s(lce_id_width_p, lce_max_assoc_p, paddr_width_p);
 
-
   // Config bus casting
   bp_cfg_bus_s cfg_bus_cast_i;
   assign cfg_bus_cast_i = cfg_bus_i;
@@ -151,9 +150,31 @@ module bp_cce
   logic [lce_assoc_width_lp-1:0]       way_lo, lru_way_lo;
   bp_coh_states_e                      state_lo;
 
-  // Arbitrated signals
-  // TODO: dir signals, others, etc.
+  // From Arbitration to Directory
+  logic [paddr_width_p-1:0]            dir_addr_li;
+  logic                                dir_addr_bypass_li
+  logic [lce_id_width_p-1:0]           dir_lce_li;
+  logic [lce_assoc_width_lp-1:0]       dir_way_li;
+  bp_coh_states_e                      dir_coh_state_li;
+  bp_cce_inst_minor_dir_op_e           dir_cmd_li;
+  logic                                dir_w_v_li;
+  // From Arbitration to Pending Bits
   logic                                pending_li;
+  logic                                pending_w_v_li;
+  logic [paddr_width_p-1:0]            pending_w_addr_li;
+  logic                                pending_w_addr_bypass_li;
+  // From Arbitration to Spec Bits
+  logic                                spec_w_v_li;
+  logic [paddr_width_p-1:0]            spec_w_addr_li;
+  logic                                spec_w_addr_bypass_li;
+  logic                                spec_v_li;
+  logic                                squash_v_li;
+  logic                                fwd_mod_v_li;
+  logic                                state_v_li;
+  bp_cce_spec_s                        spec_li;
+  logic                                spec_r_v_li;
+  logic [paddr_width_p-1:0]            spec_r_addr_li;
+  logic                                spec_r_addr_bypass_li;
 
   // From Directory
   logic                                dir_busy_lo;
@@ -187,6 +208,46 @@ module bp_cce
   bp_coh_states_e coh_state_default_lo;
   logic auto_fwd_msg_lo;
   bp_coh_states_e coh_state_default_lo;
+
+  // From Message Unit
+  logic [paddr_width_p-1:0]                  msg_dir_addr_lo;
+  logic                                      msg_dir_addr_bypass_lo;
+  logic [lce_id_width_p-1:0]                 msg_dir_lce_lo;
+  logic [lce_assoc_width_lp-1:0]             msg_dir_way_lo;
+  bp_coh_states_e                            msg_dir_coh_state_lo;
+  bp_cce_inst_minor_dir_op_e                 msg_dir_w_cmd_lo;
+  logic                                      msg_dir_w_v_lo;
+
+  // TODO: arbitration here. Need to revisit if message unit will output write signals
+  // for pop/push mem instructions, or if ucode must explicitly use wdp instruction.
+  // Latter takes an extra cycle, former might make arbitration more complex?
+  // Or, would arbitration just be busy_lo | w_v_lo?
+  // NOTE: currently, ucode push/pop results in message module writing to pending bits
+  logic                                      msg_pending_w_v_lo;
+  logic [paddr_width_p-1:0]                  msg_pending_w_addr_lo;
+  logic                                      msg_pending_w_addr_bypass_lo;
+  logic                                      msg_pending_lo;
+
+  logic                                      msg_spec_w_v_lo;
+  logic [paddr_width_p-1:0]                  msg_spec_w_addr_lo;
+  logic                                      msg_spec_w_addr_bypass_lo;
+  logic                                      msg_spec_v_lo;
+  logic                                      msg_squash_v_lo;
+  logic                                      msg_fwd_mod_v_lo;
+  logic                                      msg_state_v_lo;
+  bp_cce_spec_s                              msg_spec_lo;
+  logic                                      msg_spec_r_v_lo;
+  logic [paddr_width_p-1:0]                  msg_spec_r_addr_lo;
+  logic                                      msg_spec_r_addr_bypass_lo;
+
+  // From Message Unit to Stall
+  logic                                      msg_pending_w_busy_lo;
+  logic                                      msg_lce_cmd_busy_lo;
+  logic                                      msg_lce_resp_busy_lo;
+  logic                                      msg_spec_r_busy_lo;
+  logic                                      msg_spec_w_busy_lo;
+  logic                                      msg_dir_w_busy_lo;
+  logic                                      msg_busy_lo;
 
 
   /*
@@ -305,21 +366,84 @@ module bp_cce
       ,.addr_o(addr_lo)
       ,.addr_bypass_o(addr_bypass_lo)
       ,.lce_o(lce_lo)
-      ,.way_o(lru_way_lo)
+      ,.way_o(way_lo)
+      ,.lru_way_o(lru_way_lo)
       ,.state_o(state_lo)
       );
 
-  // TODO: arbitration unit
-  // 1. arbitrate and output directory inputs for writes (message or ucode)
-  // 2. arbitrate and output pending bit inputs for writes (message or ucode)
-  // 3. arbitrate and output speculative bit inputs for reads (message or ucode)
+  // Arbitration Unit for Directory, Spec Bits, Pending Bits
   bp_cce_arbitration
-    #(
+    #(.bp_params_p(bp_params_p)
       )
     arbitration
-     (
+     (.dir_addr_i(addr_lo)
+      ,.dir_addr_bypass_i(addr_bypass_lo)
+      ,.dir_lce_i(lce_lo)
+      ,.dir_way_i(way_lo)
+      ,.dir_coh_state_i(state_lo)
+      ,.dir_cmd_i(decoded_inst_lo.dir_op)
+      ,.dir_w_v_i(decoded_inst_lo.dir_w_v)
+      ,.msg_dir_addr_i(msg_dir_addr_lo)
+      ,.msg_dir_addr_bypass_i(msg_dir_addr_bypass_lo)
+      ,.msg_dir_lce_i(msg_dir_lce_lo)
+      ,.msg_dir_way_i(msg_dir_way_lo)
+      ,.msg_dir_coh_state_i(msg_dir_coh_state_lo)
+      ,.msg_dir_w_cmd_i(msg_dir_w_cmd_lo)
+      ,.msg_dir_w_v_i(msg_dir_w_v_lo)
+      ,.dir_addr_o(dir_addr_li)
+      ,.dir_addr_bypass_o(dir_addr_bypass_li)
+      ,.dir_lce_o(dir_lce_li)
+      ,.dir_way_o(dir_way_li)
+      ,.dir_coh_state_o(dir_coh_state_li)
+      ,.dir_cmd_o(dir_cmd_li)
+      ,.dir_w_v_o(dir_w_v_li)
+      ,.pending_w_v_i(decoded_inst_lo.pending_w_v)
+      ,.pending_w_addr_i(addr_lo)
+      ,.pending_w_addr_bypass_i(addr_bypass_lo)
+      ,.pending_i(decoded_inst_lo.pending_bit)
+      ,.msg_pending_w_busy_i(msg_pending_w_busy_lo)
+      ,.msg_pending_w_v_i(msg_pending_w_v_lo)
+      ,.msg_pending_w_addr_i(msg_pending_w_addr_lo)
+      ,.msg_pending_w_addr_bypass_i(msg_pending_w_addr_bypass_lo)
+      ,.msg_pending_i(msg_pending_lo)
+      ,.pending_w_v_o(pending_w_v_li)
+      ,.pending_w_addr_o(pending_w_addr_li)
+      ,.pending_w_addr_bypass_o(pending_w_addr_bypass_li)
+      ,.pending_o(pending_li)
+      ,.spec_w_v_i(decoded_inst_lo.spec_w_v)
+      ,.spec_w_addr_i(addr_lo)
+      ,.spec_w_addr_bypass_i(addr_bypass_lo)
+      ,.spec_v_i(decoded_inst_lo.spec_v)
+      ,.squash_v_i(decoded_inst_lo.spec_squash_v)
+      ,.fwd_mod_v_i(decoded_inst_lo.spec_fwd_mod_v)
+      ,.state_v_i(decoded_inst_lo.spec_state_v)
+      ,.spec_i(decoded_inst_lo.spec_bits)
+      ,.msg_spec_w_v_i(msg_spec_w_v_lo)
+      ,.msg_spec_w_addr_i(msg_spec_w_addr_lo)
+      ,.msg_spec_w_addr_bypass_i(msg_spec_w_addr_bypass_lo)
+      ,.msg_spec_v_i(msg_spec_v_lo)
+      ,.msg_squash_v_i(msg_squash_v_lo)
+      ,.msg_fwd_mod_v_i(msg_fwd_mod_v_lo)
+      ,.msg_state_v_i(msg_state_v_lo)
+      ,.msg_spec_i(msg_spec_lo)
+      ,.spec_w_v_o(spec_w_v_li)
+      ,.spec_w_addr_o(spec_w_addr_li)
+      ,.spec_w_addr_bypass_o(spec_w_addr_bypass_li)
+      ,.spec_v_o(spec_v_li)
+      ,.squash_v_o(squash_v_li)
+      ,.fwd_mod_v_o(fwd_mod_v_li)
+      ,.state_v_o(state_v_li)
+      ,.spec_o(spec_li)
+      ,.spec_r_v_i(decoded_inst_lo.spec_r_v)
+      ,.spec_r_addr_i(addr_lo)
+      ,.spec_r_addr_bypass_i(addr_bypass_lo)
+      ,.msg_spec_r_v_i(msg_spec_r_v_lo)
+      ,.msg_spec_r_addr_i(msg_spec_r_addr_lo)
+      ,.msg_spec_r_addr_bypass_i(msg_spec_r_addr_bypass_lo)
+      ,.spec_r_v_o(spec_r_v_li)
+      ,.spec_r_addr_o(spec_r_addr_li)
+      ,.spec_r_addr_bypass_o(spec_r_addr_bypass_li)
       );
-
 
   // Directory
   bp_cce_dir
@@ -328,19 +452,17 @@ module bp_cce
     directory
      (.clk_i(clk_i)
       ,.reset_i(reset_i)
-      // TODO: these inputs may also be set by message unit, for example when
-      // doing invalidations. They need to be replaced by signals from arbitration unit
-      ,.addr_i(addr_lo)
-      ,.addr_bypass_i(addr_bypass_lo)
-      ,.lce_i(lce_lo)
-      ,.way_i(way_lo)
-      ,.lru_way_i(lru_way_lo)
-      ,.coh_state_i(state_lo)
-      ,.cmd_i(decoded_inst_lo.dir_op)
-      ,.r_v_i(decoded_inst_lo.dir_r_v)
-      // TODO: arbitration for directory write
-      // this should be a single signal, coming from arbitration unit
-      ,.w_v_i(decoded_inst_lo.dir_w_v)
+      // Inputs
+      ,.addr_i(dir_addr_li)
+      ,.addr_bypass_i(dir_addr_bypass_li)
+      ,.lce_i(dir_lce_li)
+      ,.way_i(dir_way_li)
+      ,.lru_way_i(lru_way_lo) // only used for reads, therefore not arbitrated with message unit
+      ,.coh_state_i(dir_coh_state_li)
+      ,.cmd_i(dir_cmd_li)
+      ,.r_v_i(decoded_inst_lo.dir_r_v) // only ucode reads directory
+      ,.w_v_i(dir_w_v_li)
+      // Outputs
       ,.busy_o(dir_busy_lo)
       ,.sharers_v_o(sharers_v_lo)
       ,.sharers_hits_o(sharers_hits_lo)
@@ -362,19 +484,21 @@ module bp_cce
     pending_bits
      (.clk_i(clk_i)
       ,.reset_i(reset_i)
+      // from arbitration - message or ucode
       ,.w_v_i(pending_w_v_li)
-      ,.w_addr_i()
-      ,.w_addr_bypass_hash_i()
+      ,.w_addr_i(pending_w_addr_li)
+      ,.w_addr_bypass_hash_i(pending_w_addr_bypass_li)
       ,.pending_i(pending_li)
-      ,.clear_i(decoded_inst_lo.pending_clear)
-      ,.r_v_i()
-      ,.r_addr_i()
-      ,.r_addr_bypass_hash_i()
+      ,.clear_i(decoded_inst_lo.pending_clear) // only ucode can clear pending bit
+      // reads - only ucode
+      ,.r_v_i(decoded_inst_lo.pending_r_v)
+      ,.r_addr_i(addr_lo)
+      ,.r_addr_bypass_hash_i(addr_bypass_lo)
+      // output of read
       ,.pending_o(pending_lo)
       );
 
   // GAD logic - auxiliary directory information logic
-  // TODO: double check these inputs and outputs
   bp_cce_gad
     #(.num_lce_p(num_lce_p)
       ,.lce_assoc_p(lce_max_assoc_p)
@@ -408,114 +532,32 @@ module bp_cce
       ,.cached_dirty_flag_o(gad_cached_dirty_flag_lo)
       );
 
-  // Instruction Stall Detection
-  // TODO: this logic must be fast. No long paths should exist and a stall needs to be detected based on the 
-  bp_cce_inst_stall
-    #(.cnt_width_p(counter_width_lp)
-      )
-    inst_stall
-     (.clk_i(clk_i)
-      ,.reset_i(reset_i)
-
-/*
-      ,.pending_w_busy_i(pending_w_busy_from_msg)
-      ,.lce_cmd_busy_i(lce_cmd_busy_from_msg)
-
-      ,.lce_req_v_i(lce_req_v_i)
-      ,.lce_resp_v_i(lce_resp_v_i)
-      ,.lce_resp_type_i(lce_resp_li.msg_type)
-      ,.mem_resp_v_i(mem_resp_v_i)
-      ,.pending_v_i('0)
-
-      ,.lce_cmd_ready_i(lce_cmd_ready_i)
-      ,.mem_cmd_ready_i(mem_cmd_ready_i)
-
-      ,.fence_zero_i(fence_zero_lo)
-
-      ,.pc_stall_o(pc_stall_lo)
-      ,.pc_branch_target_o(pc_branch_target_lo)
-
-*/
-
-      ,.stall_o(stall_lo)
-      ,.stall_cnt_o(stall_cnt_lo)
-      );
-
-
-
-
-
-  // Performance monitor
-  // TODO: define a set of signals that can be counted (will increment every cycle if condition set)
-  // Define instructions that can set, clear, and read counters to GPR
-  /*
-  bp_cce_perfmon
-    #()
-    performance_monitor
-     (.clk_i(clk_i)
-      ,.reset_i(reset_i)
-      // TODO: input signals
-      // TODO: counter outputs
-      );
-  */
-
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-  // TODO: pending bit write arbitration
-  // Pending Bit Signals
-  logic pending_lo;
-  logic pending_v_lo;
-  logic pending_li, pending_from_msg;
-  logic pending_w_v_li, pending_w_v_from_msg;
-  logic [lg_num_way_groups_lp-1:0] pending_w_way_group_li, pending_r_way_group_li, pending_w_way_group_from_msg;
-  assign pending_r_way_group_li = dir_set_li;
-  // WDP write is valid if instruction pending_w_v is set (WDP op) and decoder is not stalling
-  // the instruction (due to mem data resp writing pending bit)
-  logic wdp_pending_w_v;
-  assign wdp_pending_w_v = decoded_inst_lo.pending_w_v & ~pc_stall_lo;
-  assign pending_li = (wdp_pending_w_v) ? decoded_inst_lo.imm[0] : pending_from_msg;
-  assign pending_w_v_li = (wdp_pending_w_v) ? decoded_inst_lo.pending_w_v : pending_w_v_from_msg;
-  assign pending_w_way_group_li = (wdp_pending_w_v) ? dir_set_li : pending_w_way_group_from_msg;
-
-  // Register signals
-  logic null_wb_flag_li;
-  assign null_wb_flag_li = (lce_resp_v_i & (lce_resp_li.msg_type == e_lce_cce_resp_null_wb));
-
-  // Message Unit Signals
-  logic                                          fence_zero_lo;
-  logic                                          pending_w_busy_from_msg;
-  logic                                          lce_cmd_busy_from_msg;
-  logic                                          msg_inv_busy_lo;
-  logic                                          msg_dir_w_v_lo;
-  logic [lce_id_width_p-1:0]                     inv_dir_lce_lo;
-  logic [lce_assoc_width_lp-1:0]                 inv_dir_way_lo;
-
-
-
-
-  // Registers
+  // Register File
   bp_cce_reg
-    #(.bp_params_p(bp_params_p))
+    #(.bp_params_p(bp_params_p)
+      )
     registers
      (.clk_i(clk_i)
       ,.reset_i(reset_i)
-      ,.decoded_inst_i(decoded_inst_lo)
-      ,.lce_req_i(lce_req_li)
-      ,.null_wb_flag_i(null_wb_flag_li)
-      ,.lce_resp_type_i(lce_resp_li.msg_type)
-      ,.mem_resp_type_i(mem_resp_li.msg_type)
-      ,.alu_res_i(alu_res_lo)
-      ,.mov_src_i(src_a)
 
-      ,.pending_o_i(pending_lo)
-      ,.pending_v_o_i(pending_v_lo)
+      ,.decoded_inst_i(decoded_inst_lo)
+
+      ,.lce_req_i(lce_req)
+      ,.lce_resp_i(lce_resp)
+      ,.mem_resp_i(mem_resp)
+
+      ,.src_a_i(src_a)
+      ,.src_b_i(src_b)
+      ,.alu_res_i(alu_res_lo)
+
+      ,.pending_i(pending_lo)
+
       ,.dir_lru_v_i(dir_lru_v_lo)
       ,.dir_lru_cached_excl_i(dir_lru_cached_excl_lo)
-      ,.dir_lru_tag_i(dir_lru_tag_lo)
-      ,.dir_tag_i(dir_tag_lo)
+      ,.dir_lru_addr_i(dir_lru_addr_lo)
+
+      ,.dir_addr_v_i(dir_addr_v_lo)
+      ,.dir_addr_i(dir_addr_lo)
 
       ,.gad_req_addr_way_i(gad_req_addr_way_lo)
       ,.gad_transfer_lce_i(gad_transfer_lce_lo)
@@ -535,6 +577,7 @@ module bp_cce
       ,.coh_state_o(coh_state_r_lo)
       );
 
+  // TODO: implement message unit
   // Message unit
   bp_cce_msg
     #(.bp_params_p(bp_params_p)
@@ -546,65 +589,126 @@ module bp_cce
       ,.cfg_bus_i(cfg_bus_i)
 
       // To CCE
-      ,.lce_req_i(lce_req_li)
+      ,.lce_req_i(lce_req)
       ,.lce_req_v_i(lce_req_v_i)
       ,.lce_req_yumi_o(lce_req_yumi_o)
 
-      ,.lce_resp_i(lce_resp_li)
+      ,.lce_resp_i(lce_resp)
       ,.lce_resp_v_i(lce_resp_v_i)
       ,.lce_resp_yumi_o(lce_resp_yumi_o)
 
       // From CCE
-      ,.lce_cmd_o(lce_cmd_lo)
+      ,.lce_cmd_o(lce_cmd)
       ,.lce_cmd_v_o(lce_cmd_v_o)
       ,.lce_cmd_ready_i(lce_cmd_ready_i)
 
       // To CCE
-      ,.mem_resp_i(mem_resp_i)
+      ,.mem_resp_i(mem_resp)
       ,.mem_resp_v_i(mem_resp_v_i)
       ,.mem_resp_yumi_o(mem_resp_yumi_o)
 
       // From CCE
-      ,.mem_cmd_o(mem_cmd_lo)
+      ,.mem_cmd_o(mem_cmd)
       ,.mem_cmd_v_o(mem_cmd_v_o)
       ,.mem_cmd_ready_i(mem_cmd_ready_i)
 
+      // Inputs
       ,.mshr_i(mshr_lo)
       ,.decoded_inst_i(decoded_inst_lo)
-
-      ,.pending_w_v_o(pending_w_v_from_msg)
-      ,.pending_w_way_group_o(pending_w_way_group_from_msg)
-      ,.pending_o(pending_from_msg)
-
-      ,.pending_w_busy_o(pending_w_busy_from_msg)
-      ,.lce_cmd_busy_o(lce_cmd_busy_from_msg)
-      ,.msg_inv_busy_o(msg_inv_busy_lo)
 
       ,.gpr_i(gpr_r_lo)
       ,.sharers_hits_i(sharers_hits_lo)
       ,.sharers_ways_i(sharers_ways_lo)
 
-      ,.fence_zero_o(fence_zero_lo)
+      // Outputs to Pending Bits
+      ,.pending_w_v_o(msg_pending_w_v_lo)
+      ,.pending_w_addr_o(msg_pending_w_addr_lo)
+      ,.pending_w_addr_bypass_o(msg_pending_w_addr_bypass_lo)
+      ,.pending_o(msg_pending_lo)
 
-      ,.lce_id_o(inv_dir_lce_lo)
-      ,.lce_way_o(inv_dir_way_lo)
-
+      // Outputs to Directory
+      ,.dir_addr_o(msg_dir_addr_lo)
+      ,.dir_addr_bypass_o(msg_dir_addr_bypass_lo)
+      ,.dir_lce_o(msg_dir_lce_lo)
+      ,.dir_way_o(msg_dir_way_lo)
+      ,.dir_coh_state_o(msg_dir_coh_state_lo)
+      ,.dir_w_cmd_o(msg_dir_w_cmd_lo)
       ,.dir_w_v_o(msg_dir_w_v_lo)
+
+      // Outputs to Spec Bits
+      ,.spec_w_v_o(msg_spec_w_v_lo)
+      ,.spec_w_addr_o(msg_spec_w_addr_lo)
+      ,.spec_w_addr_bypass_o(msg_spec_w_addr_bypass_lo)
+      ,.spec_v_o(msg_spec_v_lo)
+      ,.squash_v_o(msg_squash_v_lo)
+      ,.fwd_mod_v_o(msg_fwd_mod_v_lo)
+      ,.state_v_o(msg_state_v_lo)
+      ,.spec_o(msg_spec_lo)
+      ,.spec_r_v_o(msg_spec_r_v_lo)
+      ,.spec_r_addr_o(msg_spec_r_addr_lo)
+      ,.spec_r_addr_bypass_o(msg_spec_r_addr_bypass_lo)
+
+      // Outputs to Stall
+      ,.pending_w_busy_o(msg_pending_w_busy_lo)
+      ,.lce_cmd_busy_o(msg_lce_cmd_busy_lo)
+      ,.lce_resp_busy_o(msg_lce_resp_busy_lo)
+      ,.lce_resp_busy_o(msg_lce_resp_busy_lo)
+      ,.lce_resp_busy_o(msg_lce_resp_busy_lo)
+
+      ,.busy_o(msg_busy_lo)
+
+      );
+
+  // TODO: implement required stall logic and detail all stall cases
+  // Instruction Stall Detection
+  bp_cce_inst_stall
+    #(.cnt_width_p(counter_width_lp)
+      )
+    inst_stall
+     (.clk_i(clk_i)
+      ,.reset_i(reset_i)
+
+      ,.decoded_inst_i(decoded_inst_lo)
+
+      ,.lce_req_v_i(lce_req_v_i)
+      ,.lce_resp_v_i(lce_resp_v_i)
+      ,.mem_resp_v_i(mem_resp_v_i)
+      ,.pending_v_i('0)
+
+      ,.lce_cmd_ready_i(lce_cmd_ready_i)
+      ,.mem_cmd_ready_i(mem_cmd_ready_i)
+
+      // TODO: signals from message unit to stall ucode
+      ,.msg_pending_w_busy_i(msg_pending_w_busy_lo)
+      ,.msg_lce_cmd_busy_i(msg_lce_cmd_busy_lo)
+      ,.msg_lce_resp_busy_i(msg_lce_resp_busy_lo)
+      ,.msg_spec_r_busy_i(msg_spec_r_v_lo)
+      ,.msg_spec_w_busy_i(msg_spec_w_v_lo)
+      ,.msg_dir_w_busy_i(msg_dir_w_v_lo)
+
+      // Busy signal from functional units processing commands
+      ,.dir_busy_i(dir_busy_lo) // directory blocks all operations while reading
+      ,.msg_busy_i(msg_busy_lo)
+
+      ,.stall_o(stall_lo)
+      ,.stall_cnt_o(stall_cnt_lo)
       );
 
 
+  // Performance monitor
+  // TODO: define a set of signals that can be counted (will increment every cycle if condition set)
+  // Define instructions that can set, clear, and read counters to GPR
+  /*
+  bp_cce_perfmon
+    #()
+    performance_monitor
+     (.clk_i(clk_i)
+      ,.reset_i(reset_i)
+      // TODO: input signals
+      // TODO: counter outputs
+      );
+  */
 
-  // TODO: ensure branch flag operations are implemented/decoded properly
-  // Especially setup of their sources
 
-  // Branch multiple-flag operands
-  // Apply bit-mask from instruction to MSHR flags register
-  logic [`bp_cce_inst_num_flags-1:0] bf_opd;
-  assign bf_opd = (mshr.flags & decoded_inst_lo.imm[0+:`bp_cce_inst_num_flags]);
-  logic bf_and, bf_or;
-  // All flags are set (AND) if the flags with mask applied is the same as the mask itself
-  assign bf_and = (bf_opd == decoded_inst_lo.imm[0+:`bp_cce_inst_num_flags]);
-  // Any flag is set (OR) if at least one bit is set in the masked flags
-  assign bf_or = |bf_opd;
 
 endmodule

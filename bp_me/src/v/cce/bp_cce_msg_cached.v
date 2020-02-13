@@ -90,8 +90,6 @@ module bp_cce_msg_cached
    , input [num_lce_p-1:0]                             sharers_hits_i
    , input [num_lce_p-1:0][lg_lce_assoc_lp-1:0]        sharers_ways_i
 
-   , output logic                                      fence_zero_o
-
    , output logic [lg_num_lce_lp-1:0]                  lce_id_o
    , output logic [lg_lce_assoc_lp-1:0]                lce_way_o
 
@@ -180,23 +178,6 @@ module bp_cce_msg_cached
       ,.bank_o(spec_rd_cce_id_lo)
       ,.index_o(spec_rd_wg_id_lo)
       );
-
-  // CCE fence counter
-  logic fence_inc, fence_dec;
-  logic [`BSG_WIDTH(2*num_way_groups_lp)-1:0] fence_cnt;
-  assign fence_zero_o = (fence_cnt == '0);
-  bsg_counter_up_down
-    #(.max_val_p(2*num_way_groups_lp)
-      ,.init_val_p('0)
-      ,.max_step_p(1)
-      )
-    fence_counter
-      (.clk_i(clk_i)
-       ,.reset_i(reset_i)
-       ,.up_i(fence_inc)
-       ,.down_i(fence_dec)
-       ,.count_o(fence_cnt)
-       );
 
   // Speculative memory access management
   logic spec_bits_v_lo;
@@ -327,9 +308,6 @@ module bp_cce_msg_cached
     pending_w_busy_o = '0;
     lce_cmd_busy_o = '0;
     msg_inv_busy_o = '0;
-
-    fence_inc = '0;
-    fence_dec = '0;
 
     lce_id_o = '0;
     lce_way_o = '0;
@@ -521,9 +499,6 @@ module bp_cce_msg_cached
 
       end // uncached store response
 
-      // decrement the fence counter when dequeueing a memory response
-      fence_dec = mem_resp_yumi_o;
-
     end // mem_resp auto-forward
 
     // automatically dequeue coherence ack and decrement pending bit
@@ -678,9 +653,6 @@ module bp_cce_msg_cached
 
           end // cached mem_cmd
 
-          // Increment memory fence counter when message sends
-          fence_inc = mem_cmd_v_o & mem_cmd_ready_i;
-
         end // mem_cmd
 
         // LCE Command
@@ -744,8 +716,6 @@ module bp_cce_msg_cached
           // Could require programmer to do it explicitly in microcode.
           if (~pending_w_busy_o) begin
             mem_resp_yumi_o = decoded_inst_i.mem_resp_yumi;
-            // decrement the fence counter when dequeueing the memory response
-            fence_dec = mem_resp_v_i & mem_resp_yumi_o;
             // clear pending bit
             pending_w_v_o = 1'b1;
             pending_w_addr_lo = mem_resp_li.addr;

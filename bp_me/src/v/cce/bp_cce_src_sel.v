@@ -26,9 +26,7 @@ module bp_cce_src_sel
 
     , localparam lce_assoc_width_lp = `BSG_SAFE_CLOG2(lce_max_assoc_p)
     // number of way groups managed by this CCE
-    , localparam num_way_groups_lp         = ((cce_way_groups_p % num_cce_p) == 0)
-                                             ? (cce_way_groups_p/num_cce_p)
-                                             : ((cce_way_groups_p/num_cce_p) + 1)
+    , localparam num_way_groups_lp         = `BSG_CDIV(cce_way_groups_p, num_cce_p)
     , localparam lg_num_way_groups_lp      = `BSG_SAFE_CLOG2(num_way_groups_lp)
 
   )

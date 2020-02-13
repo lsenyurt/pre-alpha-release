@@ -35,6 +35,11 @@ module bp_cce_inst_stall
    , input                                       msg_pending_w_busy_i
    , input                                       msg_lce_cmd_busy_i
    , input                                       msg_lce_resp_busy_i
+   , input                                       msg_spec_r_busy_i
+   , input                                       msg_spec_w_busy_i
+   , input                                       msg_dir_w_busy_i
+
+
    // Directory busy (e.g., processing read)
    , input                                       dir_busy_i
 
@@ -88,6 +93,7 @@ module bp_cce_inst_stall
     stall_o |= (decoded_inst_i.pending_w_v & msg_pending_w_busy_i);
     stall_o |= (decoded_inst_i.dir_w_v & msg_dir_w_busy_i);
     stall_o |= (decoded_inst_i.spec_r_v & msg_spec_r_busy_i);
+    stall_o |= (decoded_inst_i.spec_w_v & msg_spec_w_busy_i);
     stall_o |= (decoded_inst_i.lce_cmd_v & msg_lce_cmd_busy_i);
     stall_o |= (decoded_inst_i.lce_resp_yumi & msg_lce_resp_busy_i);
 
@@ -95,6 +101,8 @@ module bp_cce_inst_stall
     // TODO: not needed because decoder outputs decoded_inst == '0 if instruction not valid
 
     // TODO: does GAD need to stall with any action from message unit?
+    // I don't think so. GAD is only activated by functional unit and then writes register file
+    // Question would be if any auto-message action also tried to write register file (e.g., flags)
 
   end
 
