@@ -58,7 +58,7 @@ module bp_cce
 
    // CCE-MEM Interface
    // inbound: valid->ready (a.k.a., valid->yumi), demanding consumer (connects to FIFO)
-   // outbound: ready&valid (connects to FIFO)
+   // outbound: ready->valid
    , input [cce_mem_msg_width_lp-1:0]                  mem_resp_i
    , input                                             mem_resp_v_i
    , output logic                                      mem_resp_yumi_o
