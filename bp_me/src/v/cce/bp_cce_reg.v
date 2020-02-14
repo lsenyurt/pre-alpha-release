@@ -56,7 +56,7 @@ module bp_cce_reg
    , input [paddr_width_p-1:0]                                             dir_lru_addr_i
    // From Directory - RDE operation writes address to GPR
    , input [paddr_width_p-1:0]                                             dir_addr_i
-   , input bp_cce_inst_opd_gpr_e                                           dir_addr_dst_gpr
+   , input bp_cce_inst_opd_gpr_e                                           dir_addr_dst_gpr_i
 
    // From GAD unit - written on GAD ucode operation
    , input [lce_assoc_width_p-1:0]                                         gad_req_addr_way_i
@@ -150,7 +150,7 @@ module bp_cce_reg
     // RDE operation sets write mask bit for proper GPR destination
     // this write only happens when ucode is stalling
     if (dir_addr_v_i) begin
-      gpr_w_mask[dir_addr_dst_gpr[0+:`bp_cce_inst_gpr_sel_width]] = 1'b1;
+      gpr_w_mask[dir_addr_dst_gpr_i[0+:`bp_cce_inst_gpr_sel_width]] = 1'b1;
     end
 
     // GPRs
@@ -203,15 +203,15 @@ module bp_cce_reg
           mshr_n.lru_way_id = lce_req.header.lru_way_id;
           mshr_n.uc_req_size = lce_req.header.uc_size;
           mshr_n.data_length = lce_req.header.data_length;
-          mshr_n.flags[e_flag_sel_rqf] = lce_req_rqf;
-          mshr_n.flags[e_flag_sel_ucf] = lce_req_ucf;
-          mshr_n.flags[e_flag_sel_nerf] = lce_req_nerf;
-          mshr_n.flags[e_flag_sel_ldf] = lce_req_ldf;
+          mshr_n.flags[e_opd_rqf] = lce_req_rqf;
+          mshr_n.flags[e_opd_ucf] = lce_req_ucf;
+          mshr_n.flags[e_opd_nerf] = lce_req_nerf;
+          mshr_n.flags[e_opd_ldf] = lce_req_ldf;
         end else if (decoded_inst_i.popq_sel == e_src_q_sel_lce_resp) begin
           mshr_n.lce_id = lce_resp.header.src_id;
           mshr_n.paddr = lce_resp.header.addr;
           mshr_n.data_length = lce_resp.header.data_length;
-          mshr_n.flags[e_flag_sel_nwbf] = lce_resp_nwbf;
+          mshr_n.flags[e_opd_nwbf] = lce_resp_nwbf;
         end else if (decoded_inst_i.popq_sel == e_src_q_sel_mem_resp) begin
           mshr_n.lce_id = mem_resp.header.payload.lce_id;
           mshr_n.paddr = mem_resp.header.addr;
@@ -219,13 +219,13 @@ module bp_cce_reg
           // TODO: should MSHR capture mem response size (need conversion)?
           //mshr_n.data_length = mem_resp.header.size;
           mshr_n.way_id = mem_resp.header.payload.way_id;
-          mshr_n.flags[e_flag_sel_sf] = mem_resp.header.payload.speculative;
+          mshr_n.flags[e_opd_sf] = mem_resp.header.payload.speculative;
         end else if (decoded_inst_i.popq_sel == e_src_q_sel_pending) begin
           // TODO: if implementing pending queue
-          mshr_n.flags[e_flag_sel_rqf] = '0;
-          mshr_n.flags[e_flag_sel_ucf] = '0;
-          mshr_n.flags[e_flag_sel_nerf] = '0;
-          mshr_n.flags[e_flag_sel_ldf] = '0;
+          mshr_n.flags[e_opd_rqf] = '0;
+          mshr_n.flags[e_opd_ucf] = '0;
+          mshr_n.flags[e_opd_nerf] = '0;
+          mshr_n.flags[e_opd_ldf] = '0;
         end
       end
 
@@ -234,25 +234,25 @@ module bp_cce_reg
         mshr_n.way_id = gad_req_addr_way_i;
         mshr_n.owner_lce_id = gad_owner_lce_i;
         mshr_n.owner_way_id = gad_owner_lce_way_i;
-          mshr_n.flags[e_flag_sel_tf] = gad_transfer_flag_i;
-          mshr_n.flags[e_flag_sel_rf] = gad_replacement_flag_i;
-          mshr_n.flags[e_flag_sel_uf] = gad_upgrade_flag_i;
-          mshr_n.flags[e_flag_sel_if] = gad_invalidate_flag_i;
-          mshr_n.flags[e_flag_sel_cf] = gad_cached_flag_i;
-          mshr_n.flags[e_flag_sel_cef] = gad_cached_exclusive_flag_i;
-          mshr_n.flags[e_flag_sel_cof] = gad_cached_owned_flag_i;
-          mshr_n.flags[e_flag_sel_cdf] = gad_cached_dirty_flag_i;
+        mshr_n.flags[e_opd_tf] = gad_transfer_flag_i;
+        mshr_n.flags[e_opd_rf] = gad_replacement_flag_i;
+        mshr_n.flags[e_opd_uf] = gad_upgrade_flag_i;
+        mshr_n.flags[e_opd_if] = gad_invalidate_flag_i;
+        mshr_n.flags[e_opd_cf] = gad_cached_flag_i;
+        mshr_n.flags[e_opd_cef] = gad_cached_exclusive_flag_i;
+        mshr_n.flags[e_opd_cof] = gad_cached_owned_flag_i;
+        mshr_n.flags[e_opd_cdf] = gad_cached_dirty_flag_i;
       end
 
       // Overrides from defaults - Directory
       if (dir_lru_v_i) begin
         mshr_n.lru_paddr = dir_lru_addr_i;
-        mshr_n.flags[e_flag_sel_lef] = dir_lru_cached_excl_i;
+        mshr_n.flags[e_opd_lef] = dir_lru_cached_excl_i;
       end
 
       // RDP instruction writes pending flag
       if (decoded_inst_i.pending_r_v) begin
-        mshr_n.flags[e_flag_sel_pf] = pending_i;
+        mshr_n.flags[e_opd_pf] = pending_i;
       end
 
       // Flag operation - ldflags, ldflagsi, or clf
@@ -293,6 +293,9 @@ module bp_cce_reg
 
       // MSHR writes - these occur on a per MSHR item basis
       // By default, all fields can only be written while not stalling
+
+      // TODO: check all write conditions (i.e., writes when not stalling)
+
       if (~stall_i & decoded_inst_i.mshr_clear) begin
         mshr_r <= mshr_n;
       end else begin
@@ -318,17 +321,17 @@ module bp_cce_reg
         if (~stall_i & decoded_inst_i.owner_way_w_v) begin
           mshr_r.owner_way_id <= mshr_n.owner_way_id;
         end
-        if (decoded_inst_i.next_coh_state_w_v) begin
+        if (~stall_i & decoded_inst_i.next_coh_state_w_v) begin
           mshr_r.next_coh_state <= mshr_n.next_coh_state;
         end
         for (int i = 0; i < `bp_cce_inst_num_flags; i=i+1) begin
-          if (~stall_i & decoded_inst_i.flag_mask_w_v[i]) begin
+          if (~stall_i & decoded_inst_i.flag_w_v[i]) begin
             mshr_r.flags[i] <= mshr_n.flags[i];
           end
         end
         // LRU Cached Exclusive Flag can also be written while stalling, from directory
         if (dir_lru_v_i) begin
-          mshr_r.flags[e_flag_sel_lef] <= mshr_n.flags[e_flag_sel_lef];
+          mshr_r.flags[e_opd_lef] <= mshr_n.flags[e_opd_lef];
         end
         if (decoded_inst_i.uc_req_size_w_v) begin
           mshr_r.uc_req_size <= mshr_n.uc_req_size;

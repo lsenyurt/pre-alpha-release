@@ -185,6 +185,7 @@ module bp_cce
   logic                                dir_addr_v_lo, dir_lru_v_lo;
   logic                                dir_lru_cached_excl_lo;
   logic [paddr_width_p-1:0]            dir_addr_lo, dir_lru_addr_lo;
+  bp_cce_inst_opd_gpr_e                dir_addr_dst_gpr_lo;
 
   // From Pending Bits
   logic                                pending_lo;
@@ -381,7 +382,7 @@ module bp_cce
       ,.dir_lce_i(lce_lo)
       ,.dir_way_i(way_lo)
       ,.dir_coh_state_i(state_lo)
-      ,.dir_cmd_i(decoded_inst_lo.dir_op)
+      ,.dir_cmd_i(decoded_inst_lo.minor_op_u.dir_minor_op)
       ,.dir_w_v_i(decoded_inst_lo.dir_w_v)
       ,.msg_dir_addr_i(msg_dir_addr_lo)
       ,.msg_dir_addr_bypass_i(msg_dir_addr_bypass_lo)
@@ -459,6 +460,7 @@ module bp_cce
       ,.way_i(dir_way_li)
       ,.lru_way_i(lru_way_lo) // only used for reads, therefore not arbitrated with message unit
       ,.coh_state_i(dir_coh_state_li)
+      ,.addr_dst_gpr_i(decoded_inst_lo.dst.gpr) // only used for reads, not arbitrated
       ,.cmd_i(dir_cmd_li)
       ,.r_v_i(decoded_inst_lo.dir_r_v) // only ucode reads directory
       ,.w_v_i(dir_w_v_li)
@@ -473,6 +475,7 @@ module bp_cce
       ,.lru_addr_o(dir_lru_addr_lo)
       ,.addr_v_o(dir_addr_v_lo)
       ,.addr_o(dir_addr_lo)
+      ,.addr_dst_gpr_o(dir_addr_dst_gpr_lo)
       );
 
   // Pending Bits
@@ -558,6 +561,7 @@ module bp_cce
 
       ,.dir_addr_v_i(dir_addr_v_lo)
       ,.dir_addr_i(dir_addr_lo)
+      ,.dir_addr_dst_gpr_i(dir_addr_dst_gpr_lo)
 
       ,.gad_req_addr_way_i(gad_req_addr_way_lo)
       ,.gad_transfer_lce_i(gad_transfer_lce_lo)

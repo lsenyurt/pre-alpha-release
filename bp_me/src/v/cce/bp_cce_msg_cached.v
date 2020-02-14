@@ -750,6 +750,10 @@ module bp_cce_msg_cached
       end // READY
 
       INV_CMD: begin
+        // TODO: anything in this block that comes from the decoded instruction will be
+        // invalid. The instruction being decoded (and stalled) this cycle will not be the
+        // invalidate instruction.
+
         msg_inv_busy_o = 1'b1;
 
         // only send invalidation if priority encode has valid output
@@ -760,7 +764,7 @@ module bp_cce_msg_cached
           if (~lce_cmd_busy_o) begin
 
             lce_cmd_v_o = 1'b1;
-            lce_cmd.msg_type = decoded_inst_i.lce_cmd;
+            lce_cmd.msg_type = e_lce_cmd_invalidate_tag;
 
             // destination and way come from sharers information
             lce_cmd.dst_id = pe_lce_id;

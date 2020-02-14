@@ -40,6 +40,7 @@ module bp_cce_dir
    , input [lce_assoc_width_lp-1:0]                               way_i
    , input [lce_assoc_width_lp-1:0]                               lru_way_i
    , input bp_coh_states_e                                        coh_state_i
+   , input bp_cce_inst_opd_gpr_e                                  addr_dst_gpr_i
 
    , input bp_cce_inst_minor_dir_op_e                             cmd_i
    , input                                                        r_v_i
@@ -58,6 +59,7 @@ module bp_cce_dir
 
    , output logic                                                 addr_v_o
    , output logic [paddr_width_p-1:0]                             addr_o
+   , output bp_cce_inst_opd_gpr_e                                 addr_dst_gpr_o
   );
 
 
@@ -88,6 +90,7 @@ module bp_cce_dir
 
   logic icache_busy, icache_lru_v, icache_lru_cached_excl, icache_addr_v;
   logic [paddr_width_p-1:0] icache_lru_addr_lo, icache_addr_lo;
+  bp_cce_inst_opd_gpr_e icache_addr_dst_gpr_lo;
 
   bp_cce_dir_segment
     #(.sets_p(icache_dir_sets_lp)
@@ -107,6 +110,7 @@ module bp_cce_dir
       ,.way_i(way_i[0+:lg_icache_assoc_lp])
       ,.lru_way_i(lru_way_i[0+:lg_icache_assoc_lp])
       ,.coh_state_i(coh_state_i)
+      ,.addr_dst_gpr_i(addr_dst_gpr_i)
       ,.cmd_i(cmd_i)
       ,.r_v_i(icache_r_v)
       ,.w_v_i(icache_w_v)
@@ -120,6 +124,7 @@ module bp_cce_dir
       ,.lru_addr_o(icache_lru_addr_lo)
       ,.addr_v_o(icache_addr_v)
       ,.addr_o(icache_addr_lo)
+      ,.addr_dst_gpr_o(icache_addr_dst_gpr_lo)
       );
 
   // D$ directory segment
@@ -145,6 +150,7 @@ module bp_cce_dir
 
   logic dcache_busy, dcache_lru_v, dcache_lru_cached_excl, dcache_addr_v;
   logic [paddr_width_p-1:0] dcache_lru_addr_lo, dcache_addr_lo;
+  bp_cce_inst_opd_gpr_e dcache_addr_dst_gpr_lo;
 
   bp_cce_dir_segment
     #(.sets_p(dcache_dir_sets_lp)
@@ -164,6 +170,7 @@ module bp_cce_dir
       ,.way_i(way_i[0+:lg_dcache_assoc_lp])
       ,.lru_way_i(lru_way_i[0+:lg_dcache_assoc_lp])
       ,.coh_state_i(coh_state_i)
+      ,.addr_dst_gpr_i(addr_dst_gpr_i)
       ,.cmd_i(cmd_i)
       ,.r_v_i(dcache_r_v)
       ,.w_v_i(dcache_w_v)
@@ -177,6 +184,7 @@ module bp_cce_dir
       ,.lru_addr_o(dcache_lru_addr_lo)
       ,.addr_v_o(dcache_addr_v)
       ,.addr_o(dcache_addr_lo)
+      ,.addr_dst_gpr_o(dcache_addr_dst_gpr_lo)
       );
 
   // A$ directory segment
@@ -197,6 +205,7 @@ module bp_cce_dir
 
   logic acache_busy, acache_lru_v, acache_lru_cached_excl, acache_addr_v;
   logic [paddr_width_p-1:0] acache_lru_addr_lo, acache_addr_lo;
+  bp_cce_inst_opd_gpr_e acache_addr_dst_gpr_lo;
 
   generate
   if (num_acc_p > 0) begin
@@ -224,6 +233,7 @@ module bp_cce_dir
         ,.way_i(way_i[0+:lg_acache_assoc_lp])
         ,.lru_way_i(lru_way_i[0+:lg_acache_assoc_lp])
         ,.coh_state_i(coh_state_i)
+        ,.addr_dst_gpr_i(addr_dst_gpr_i)
         ,.cmd_i(cmd_i)
         ,.r_v_i(acache_r_v)
         ,.w_v_i(acache_w_v)
@@ -237,6 +247,7 @@ module bp_cce_dir
         ,.lru_addr_o(acache_lru_addr_lo)
         ,.addr_v_o(acache_addr_v)
         ,.addr_o(acache_addr_lo)
+        ,.addr_dst_gpr_o(acache_addr_dst_gpr_lo)
         );
 
   end else begin
@@ -253,6 +264,7 @@ module bp_cce_dir
       acache_lru_addr_lo = '0;
       acache_addr_v = '0;
       acache_addr_lo = '0;
+      acache_addr_dst_gpr_lo = e_opd_r0;
     end
   end
   endgenerate
@@ -292,6 +304,13 @@ module bp_cce_dir
                     : acache_addr_v
                       ? acache_addr_lo
                       : '0;
+  assign addr_dst_gpr_o = icache_addr_v
+                          ? icache_addr_dst_gpr_lo
+                          : dcache_addr_v
+                            ? dcache_addr_dst_gpr_lo
+                            : acache_addr_v
+                              ? acache_addr_dst_gpr_lo
+                              : '0;
 
   // Nonsynth assertions
   //synopsys translate_off

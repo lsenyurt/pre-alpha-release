@@ -85,6 +85,7 @@ module bp_cce_dir_segment
    , input [lg_assoc_lp-1:0]                                      way_i
    , input [lg_assoc_lp-1:0]                                      lru_way_i
    , input bp_coh_states_e                                        coh_state_i
+   , input bp_cce_inst_opd_gpr_e                                  addr_dst_gpr_i
 
    , input bp_cce_inst_minor_dir_op_e                             cmd_i
    , input                                                        r_v_i
@@ -103,6 +104,7 @@ module bp_cce_dir_segment
 
    , output logic                                                 addr_v_o
    , output logic [paddr_width_p-1:0]                             addr_o
+   , output bp_cce_inst_opd_gpr_e                                 addr_dst_gpr_o
   );
 
   // If value of tag_sets_per_row_lp changes (is no longer 2) the directory logic
@@ -180,14 +182,14 @@ module bp_cce_dir_segment
   dir_state_e state_r, state_n;
 
   // Registers
-  // TODO: set_r and set_n are unused. Remove?
-  logic [lg_sets_lp-1:0]          set_r, set_n;
   logic [lg_num_lce_lp-1:0]       lce_r, lce_n;
   logic [lg_assoc_lp-1:0]         way_r, way_n;
   logic [lg_assoc_lp-1:0]         lru_way_r, lru_way_n;
   logic [tag_width_lp-1:0]        tag_r, tag_n;
   logic [tag_sets_per_row_lp-1:0] dir_data_o_v_r, dir_data_o_v_n;
+  bp_cce_inst_opd_gpr_e           addr_dst_gpr_r, addr_dst_gpr_n;
 
+  assign addr_dst_gpr_o = addr_dst_gpr_r;
 
   // Sharers registers
   logic                                             sharers_v_r, sharers_v_n;
@@ -207,13 +209,14 @@ module bp_cce_dir_segment
   always_ff @(posedge clk_i) begin
     if (reset_i) begin
       state_r <= RESET;
-      set_r <= '0;
       lce_r <= '0;
       way_r <= '0;
       lru_way_r <= '0;
       tag_r <= '0;
       dir_data_o_v_r <= '0;
-      dir_ram_addr_r <= '0;
+      dir_ram_addr_r <= '0;      
+
+      addr_dst_gpr_r <= e_opd_r0;
 
       sharers_v_r <= '0;
       sharers_hits_r <= '0;
@@ -222,13 +225,14 @@ module bp_cce_dir_segment
 
     end else begin
       state_r <= state_n;
-      set_r <= set_n;
       lce_r <= lce_n;
       way_r <= way_n;
       lru_way_r <= lru_way_n;
       tag_r <= tag_n;
       dir_data_o_v_r <= dir_data_o_v_n;
       dir_ram_addr_r <= dir_ram_addr_n;
+
+      addr_dst_gpr_r <= addr_dst_gpr_n;
 
       sharers_v_r <= sharers_v_n;
       sharers_hits_r <= sharers_hits_n;
@@ -254,14 +258,14 @@ module bp_cce_dir_segment
     dir_ram_w_v = '0;
     dir_ram_addr = '0;
 
-    // registers
-    set_n = set_r;
     lce_n = lce_r;
     way_n = way_r;
     lru_way_n = lru_way_r;
     tag_n = tag_r;
     dir_data_o_v_n = '0;
     dir_ram_addr_n = dir_ram_addr_r;
+
+    addr_dst_gpr_n = addr_dst_gpr_r;
 
     sharers_v_n = sharers_v_r;
     sharers_hits_n = sharers_hits_r;
@@ -303,11 +307,12 @@ module bp_cce_dir_segment
           sharers_coh_states_n = '0;
 
           // capture inputs into registers
-          set_n     = set_id;
           lce_n     = lce_i;
           way_n     = way_i;
           lru_way_n = lru_way_i;
           tag_n     = addr_i[tag_offset_lp+:tag_width_lp];
+
+          addr_dst_gpr_n = addr_dst_gpr_i;
 
           // ensure counter is reset to 0
           cnt_clr = 1'b1;
@@ -356,6 +361,7 @@ module bp_cce_dir_segment
           sharers_v_n = '0;
 
           tag_n = '0;
+          addr_dst_gpr_n = '0;
 
           state_n = READY;
           dir_ram_v = 1'b1;

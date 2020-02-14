@@ -28,16 +28,18 @@ module bp_cce_alu
 
   always_comb begin : alu
     unique case (alu_op_i)
-      e_add_op: res_o = opd_a_i + opd_b_i;
-      e_sub_op: res_o = opd_a_i - opd_b_i;
-      e_lsh_op: res_o = opd_a_i << opd_b_i;
-      e_rsh_op: res_o = opd_a_i >> opd_b_i;
-      e_and_op: res_o = opd_a_i & opd_b_i;
-      e_or_op:  res_o = opd_a_i | opd_b_i;
-      e_xor_op: res_o = opd_a_i ^ opd_b_i;
-      e_neg_op: res_o = ~opd_a_i;
-      e_not_op: res_o = !opd_a_i;
-      default:  res_o = '0;
+      e_alu_add:  res_o = opd_a_i + opd_b_i;
+      e_alu_sub:  res_o = opd_a_i - opd_b_i;
+      e_alu_lsh:  res_o = opd_a_i << opd_b_i;
+      e_alu_rsh:  res_o = opd_a_i >> opd_b_i;
+      e_alu_and:  res_o = opd_a_i & opd_b_i;
+      e_alu_or:   res_o = opd_a_i | opd_b_i;
+      e_alu_xor:  res_o = opd_a_i ^ opd_b_i;
+      e_alu_neg:  res_o = ~opd_a_i;
+      e_alu_not:  res_o = !opd_a_i;
+      e_alu_nand: res_o = !(opd_a_i & opd_b_i);
+      e_alu_nor:  res_o = !(opd_a_i | opd_b_i);
+      default:    res_o = '0;
     endcase
   end
 endmodule

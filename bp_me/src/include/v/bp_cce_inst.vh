@@ -61,7 +61,7 @@
 typedef enum logic [2:0] {
   e_op_alu                               = 3'b000    // ALU operation
   ,e_op_branch                           = 3'b001    // Branch (control flow) operation
-  ,e_op_data                             = 3'b010    // Register data movement operation
+  ,e_op_reg_data                         = 3'b010    // Register data movement operation
 //,e_op_mem                              = 3'b011    // Memory data operation (not implemented)
   ,e_op_flag                             = 3'b100
   ,e_op_dir                              = 3'b101
@@ -76,7 +76,6 @@ typedef enum logic [2:0] {
 // Minor ALU Op Codes
 typedef enum logic [3:0] {
   e_add_op                               = 4'b0000   // Add
-//,e_nop_op                              = 4'b0000   // Null Operation (r0 = r0 + r0)
   ,e_sub_op                              = 4'b0001   // Subtract
   ,e_lsh_op                              = 4'b0010   // Left Shift
   ,e_rsh_op                              = 4'b0011   // Right Shift
@@ -85,6 +84,7 @@ typedef enum logic [3:0] {
   ,e_xor_op                              = 4'b0110   // Bit-wise XOR
   ,e_neg_op                              = 4'b0111   // Bit-wise negation (unary)
   ,e_addi_op                             = 4'b1000   // Add immediate
+//,e_nop_op                              = 4'b1000   // Null Operation (r0 = r0 + r0)
 //,e_inc_op                              = 4'b1000   // Increment register by 1
   ,e_subi_op                             = 4'b1001   // Subtract immediate
 //,e_dec_op                              = 4'b1001   // Decrement register by 1
@@ -119,12 +119,15 @@ typedef enum logic [3:0] {
   e_mov_op                               = 4'b0000   // Move GPR to GPR
   ,e_movsg_op                            = 4'b0001   // Move Special Register to GPR
   ,e_movgs_op                            = 4'b0010   // Move GPR to Special Register
+  //,e_ld_flags_op                       = 4'b0010   // MSHR.flags = GPR[0+:num_flags]
   ,e_movfg_op                            = 4'b0011   // Move Flag to GPR[0]
   ,e_movgf_op                            = 4'b0100   // Move GPR[0] to Flag
   ,e_movpg_op                            = 4'b0101   // Move Param to GPR
   ,e_movgp_op                            = 4'b0110   // Move GPR to Param
   ,e_movi_op                             = 4'b1000   // Move Immediate to GPR
   ,e_movis_op                            = 4'b1001   // Move Immediate to Special Register
+//,e_ld_flags_i_op                       = 4'b1001   // MSHR.flags = imm[0+:num_flags]
+//,e_clf_op                              = 4'b1001   // MSHR.flags = 0
   ,e_clm_op                              = 4'b1111   // Clear MSHR register
 } bp_cce_inst_minor_reg_data_op_e;
 
@@ -152,15 +155,12 @@ typedef enum logic [3:0] {
   ,e_orf_op                              = 4'b0010   // Logical OR two flags to GPR
   ,e_nandf_op                            = 4'b0011   // Logical AND two flags to GPR
   ,e_norf_op                             = 4'b0100   // Logical OR two flags to GPR
-  ,e_negf_op                             = 4'b0101   // Bitwise negation of flag
-  ,e_ld_flags_op                         = 4'b0110   // MSHR.flags = GPR[0+:num_flags]
+  ,e_notf_op                             = 4'b0101   // Logical not of flag
 
   ,e_bf_op                               = 4'b1000   // Branch if (MSHR.Flags & mask) == mask
   ,e_bfz_op                              = 4'b1001   // Branch if (MSHR.Flags & mask) == 0
   ,e_bfnz_op                             = 4'b1010   // Branch if (MSHR.Flags & mask) != 0
   ,e_bfnot_op                            = 4'b1011   // Branch if (MSHR.Flags & mask) != mask
-  ,e_ld_flags_i_op                       = 4'b1100   // MSHR.flags = imm[0+:num_flags]
-//,e_clf_op                              = 4'b1100   // MSHR.flags = 0
 } bp_cce_inst_minor_flag_op_e;
 
 // Minor Directory Op Codes
@@ -221,15 +221,17 @@ typedef union packed {
  * ALU Unit Operation
  */
 typedef enum logic [3:0] {
-  e_add_op                               = 4'b0000   // Add
-  ,e_sub_op                              = 4'b0001   // Subtract
-  ,e_lsh_op                              = 4'b0010   // Left Shift
-  ,e_rsh_op                              = 4'b0011   // Right Shift
-  ,e_and_op                              = 4'b0100   // Bit-wise AND
-  ,e_or_op                               = 4'b0101   // Bit-wise OR
-  ,e_xor_op                              = 4'b0110   // Bit-wise XOR
-  ,e_neg_op                              = 4'b0111   // Bit-wise negation (unary)
-  ,e_not_op                              = 4'b1000   // Logical Not (unary)
+  e_alu_add                              = 4'b0000   // Add
+  ,e_alu_sub                             = 4'b0001   // Subtract
+  ,e_alu_lsh                             = 4'b0010   // Left Shift
+  ,e_alu_rsh                             = 4'b0011   // Right Shift
+  ,e_alu_and                             = 4'b0100   // Bit-wise AND
+  ,e_alu_or                              = 4'b0101   // Bit-wise OR
+  ,e_alu_xor                             = 4'b0110   // Bit-wise XOR
+  ,e_alu_neg                             = 4'b0111   // Bit-wise negation (unary)
+  ,e_alu_not                             = 4'b1000   // Logical Not (unary)
+  ,e_alu_nand                            = 4'b1001   // Logical Not of Bit-wise And
+  ,e_alu_nor                             = 4'b1010   // Logical Not of Bit-wise Or
 } bp_cce_inst_alu_op_e;
 
 `define bp_cce_inst_alu_op_width $bits(bp_cce_inst_alu_op_e)
@@ -254,7 +256,6 @@ typedef enum logic [3:0] {
   ,e_spec_unset                          = 4'b0001 // Set spec bit to 0
   ,e_spec_squash                         = 4'b0010 // Set squash bit to 1, clear spec bit
   ,e_spec_fwd_mod                        = 4'b0011 // Set fwd_mod bit to 1, clear spec bit, set state to state
-  ,e_spec_clear                          = 4'b0111 // Write all fields of speculative access bits to 0
   ,e_spec_rd_spec                        = 4'b1000 // Read spec bit to GPR
 } bp_cce_inst_spec_op_e;
 
@@ -321,22 +322,22 @@ typedef enum logic [3:0] {
 
 // Control Flag one hot encoding
 typedef enum logic [15:0] {
-  e_cce_flag_rqf_mask                    = 16'b0000_0000_0000_0001 // request type flag
-  ,e_cce_flag_ucf_mask                   = 16'b0000_0000_0000_0010 // uncached request flag
-  ,e_cce_flag_nerf_mask                  = 16'b0000_0000_0000_0100 // non-exclusive request flag
-  ,e_cce_flag_ldf_mask                   = 16'b0000_0000_0000_1000 // lru dirty flag
-  ,e_cce_flag_pf_mask                    = 16'b0000_0000_0001_0000 // pending flag
-  ,e_cce_flag_lef_mask                   = 16'b0000_0000_0010_0000 // lru cached exclusive flag
-  ,e_cce_flag_cf_mask                    = 16'b0000_0000_0100_0000 // cached by other flag
-  ,e_cce_flag_cef_mask                   = 16'b0000_0000_1000_0000 // cached exclusive by other flag
-  ,e_cce_flag_cof_mask                   = 16'b0000_0001_0000_0000 // cached owned by other flag
-  ,e_cce_flag_cdf_mask                   = 16'b0000_0010_0000_0000 // cached dirty by other flag
-  ,e_cce_flag_tf_mask                    = 16'b0000_0100_0000_0000 // transfer flag
-  ,e_cce_flag_rf_mask                    = 16'b0000_1000_0000_0000 // replacement flag
-  ,e_cce_flag_uf_mask                    = 16'b0001_0000_0000_0000 // upgrade flag
-  ,e_cce_flag_if_mask                    = 16'b0010_0000_0000_0000 // invalidate flag
-  ,e_cce_flag_nwbf_mask                  = 16'b0100_0000_0000_0000 // null writeback flag
-  ,e_cce_flag_sf_mask                    = 16'b1000_0000_0000_0000 // speculative flag
+  e_flag_rqf                    = 16'b0000_0000_0000_0001 // request type flag
+  ,e_flag_ucf                   = 16'b0000_0000_0000_0010 // uncached request flag
+  ,e_flag_nerf                  = 16'b0000_0000_0000_0100 // non-exclusive request flag
+  ,e_flag_ldf                   = 16'b0000_0000_0000_1000 // lru dirty flag
+  ,e_flag_pf                    = 16'b0000_0000_0001_0000 // pending flag
+  ,e_flag_lef                   = 16'b0000_0000_0010_0000 // lru cached exclusive flag
+  ,e_flag_cf                    = 16'b0000_0000_0100_0000 // cached by other flag
+  ,e_flag_cef                   = 16'b0000_0000_1000_0000 // cached exclusive by other flag
+  ,e_flag_cof                   = 16'b0000_0001_0000_0000 // cached owned by other flag
+  ,e_flag_cdf                   = 16'b0000_0010_0000_0000 // cached dirty by other flag
+  ,e_flag_tf                    = 16'b0000_0100_0000_0000 // transfer flag
+  ,e_flag_rf                    = 16'b0000_1000_0000_0000 // replacement flag
+  ,e_flag_uf                    = 16'b0001_0000_0000_0000 // upgrade flag
+  ,e_flag_if                    = 16'b0010_0000_0000_0000 // invalidate flag
+  ,e_flag_nwbf                  = 16'b0100_0000_0000_0000 // null writeback flag
+  ,e_flag_sf                    = 16'b1000_0000_0000_0000 // speculative flag
 } bp_cce_inst_flag_onehot_e;
 
 `define bp_cce_inst_num_flags $bits(bp_cce_inst_flag_onehot_e)
@@ -892,10 +893,12 @@ typedef struct packed {
   // Directory
   logic                                    dir_r_v;
   logic                                    dir_w_v;
-  bp_cce_inst_minor_dir_op_e               dir_op;
 
   // GAD Module
   logic                                    gad_v;
+
+  // WFQ
+  logic                                    wfq_v;
 
   // Pending Bits
   logic                                    pending_r_v;
@@ -916,6 +919,7 @@ typedef struct packed {
   logic                                    poph;
   logic                                    popq;
   logic                                    pushq;
+  logic                                    pushq_custom;
   bp_cce_inst_dst_q_sel_e                  pushq_qsel;
   bp_cce_inst_src_q_sel_e                  popq_qsel;
   logic                                    lce_req_yumi;
@@ -929,6 +933,7 @@ typedef struct packed {
 
   // GPR write mask
   logic [`bp_cce_inst_num_gpr-1:0]         gpr_w_v;
+
   // MSHR write signals
   logic                                    mshr_clear;
   logic                                    lce_w_v;
